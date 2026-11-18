@@ -12,6 +12,8 @@ from typing import Dict, List, Literal, Tuple
 import networkx as nx
 import numpy as np
 from scipy.linalg import expm, solve_continuous_are, solve_continuous_lyapunov
+from scipy.optimize import brentq
+from scipy.special import expit
 
 
 def build_input_matrix(n_nodes: int, actuator_nodes: List[int]) -> np.ndarray:
@@ -159,6 +161,57 @@ def gramian_metrics(W: np.ndarray, reg: float = 1e-6) -> Dict[str, float]:
     }
 
 
+def _reachability_factor(A: np.ndarray, B: np.ndarray, horizon: float) -> np.ndarray:
+    """Square root L with W = L L.T; retain weak directions before squaring singular values."""
+    n = A.shape[0]
+    if horizon == 0 or not B.size:
+        return np.empty((n, 0))
+    # Scale the base interval to ||Ah||_1 <= 0.5 for Gauss-Legendre quadrature.
+    scale = max(1.0, 2.0 * horizon * np.linalg.norm(A, ord=1))
+    doublings = int(np.ceil(np.log2(scale)))
+    h = horizon / 2**doublings
+    nodes, weights = np.polynomial.legendre.leggauss(16)
+    terms = [np.sqrt(w * h / 2) * (expm(A * ((z + 1) * h / 2)) @ B)
+             for z, w in zip(nodes, weights)]
+    factor = np.linalg.qr(np.column_stack(terms).T, mode="r").T
+    phi = expm(A * h)
+    for _ in range(doublings):
+        # W(2h) = W(h) + exp(Ah) W(h) exp(Ah).T.
+        combined = np.column_stack((factor, phi @ factor))
+        factor = np.linalg.qr(combined.T, mode="r").T
+        phi = phi @ phi
+    return factor
+
+
+def _matched_endpoint(tolerance, gains, coordinates, error_floor, numerical_atol):
+    """Minimum continuous input energy subject to ||x(T)-xf|| <= tolerance."""
+    if not np.isfinite(tolerance) or tolerance < 0:
+        raise ValueError("Endpoint tolerances must be finite and nonnegative")
+    record = {"tolerance": float(tolerance), "feasible": True}
+    uncontrolled = float(np.hypot(error_floor, np.linalg.norm(coordinates)))
+    if uncontrolled <= tolerance + numerical_atol:
+        return {**record, "input_energy": 0.0, "terminal_error": uncontrolled}
+    if tolerance + numerical_atol < error_floor:
+        return {**record, "feasible": False, "input_energy": None, "terminal_error": None}
+    if tolerance <= error_floor + numerical_atol:
+        return {**record, "input_energy": float(np.linalg.norm(coordinates / gains)**2),
+                "terminal_error": error_floor}
+
+    # The terminal residual grows continuously from its floor to the free response
+    # as the ridge weight moves from zero to infinity. Work in log space.
+    log_eigenvalues = 2 * np.log(gains)
+
+    def residual(log_ridge):
+        residual_coordinates = expit(log_ridge - log_eigenvalues) * coordinates
+        return float(np.hypot(error_floor, np.linalg.norm(residual_coordinates)))
+
+    log_ridge = brentq(lambda v: residual(v) - tolerance,
+                       float(log_eigenvalues.min() - 80), float(log_eigenvalues.max() + 80))
+    input_coordinates = expit(log_eigenvalues - log_ridge) * (coordinates / gains)
+    return {**record, "input_energy": float(np.linalg.norm(input_coordinates)**2),
+            "terminal_error": residual(log_ridge)}
+
+
 def minimum_energy_trajectory(
     A: np.ndarray,
     B: np.ndarray,
@@ -167,53 +220,67 @@ def minimum_energy_trajectory(
     horizon: float = 2.0,
     n_steps: int = 80,
     reg: float = 1e-6,
-) -> Dict[str, np.ndarray | float | Dict[str, float]]:
+    endpoint_tolerances: Tuple[float, ...] = (),
+) -> dict:
+    """Unconstrained finite-horizon linear steering in continuous time.
+
+    With reg > 0 minimize integral ||u||^2 dt + ||x(T)-xf||^2/reg.
+    The legacy key energy now aliases input_energy (the actual input integral);
+    its former, penalty-inclusive value is returned as regularized_objective.
+    With reg == 0 enforce an exact endpoint and raise for an unreachable target.
+    Numerical reachability uses the SVD of a square-root endpoint Gramian.
     """
-    Synthesize the Pontryagin minimum-energy open-loop control input u*(t) steering
-    x(0) = x0 to x(T) = xf in horizon T, and simulate the state trajectory x(t) via
-    exact-midpoint 4th-order Runge-Kutta integration.
-    """
+    if not np.isfinite(horizon) or not np.isfinite(reg) or horizon < 0 or reg < 0 or n_steps < 1:
+        raise ValueError("Require horizon >= 0, reg >= 0 and n_steps >= 1")
     n = A.shape[0]
-    W = compute_controllability_gramian(A, B, horizon=horizon, n_steps=n_steps)
-    eAT = expm(A * horizon)
-    delta = xf - eAT @ x0
+    delta = xf - expm(A * horizon) @ x0
+    factor = _reachability_factor(A, B, horizon)
+    basis, values, _ = np.linalg.svd(factor, full_matrices=False)
+    sigma_max = float(values.max()) if values.size else 0.0
+    rank_tol = max(factor.shape) * np.finfo(float).eps * sigma_max
+    keep = values > rank_tol
+    basis, gains = basis[:, keep], values[keep]
+    coordinates = basis.T @ delta
+    error_floor = float(np.linalg.norm(delta - basis @ coordinates))
+    endpoint_atol = 64 * n * np.finfo(float).eps * float(np.linalg.norm(delta))
+    reachable = error_floor <= endpoint_atol
+    exact_energy = float(np.linalg.norm(coordinates / gains)**2) if reachable else None
+    if reg == 0 and not reachable:
+        raise ValueError("The exact target is outside the numerical reachable subspace")
 
-    W_reg = W + reg * np.eye(n)
-    v_opt = np.linalg.solve(W_reg, delta)
-    min_energy = float(delta.T @ v_opt)
-
+    coefficients = coordinates / (gains**2 + reg)
+    multiplier = basis @ coefficients
+    input_energy = float(np.linalg.norm(gains * coefficients)**2)
+    terminal_error = float(np.hypot(error_floor, np.linalg.norm(reg * coefficients)))
+    terminal_penalty = terminal_error**2 / reg if reg > 0 else 0.0
     ts = np.linspace(0.0, horizon, n_steps + 1)
-    dt = horizon / float(n_steps)
-
-    us = np.zeros((n_steps + 1, B.shape[1]), dtype=float)
-    for idx, t in enumerate(ts):
-        eat_rem = expm(A.T * (horizon - t))
-        us[idx] = B.T @ (eat_rem @ v_opt)
-
-    # Forward RK4 integration of dx/dt = A x + B u*(t) with exact midpoint u*(t + 0.5*dt)
-    xs = np.zeros((n_steps + 1, n), dtype=float)
-    xs[0] = x0.copy()
+    dt = horizon / n_steps
+    transition = expm(A * dt)
+    step_gramian = compute_controllability_gramian(A, B, horizon=dt)
+    costates = np.empty((n_steps + 1, n))
+    costates[-1] = multiplier
+    for idx in range(n_steps, 0, -1):
+        costates[idx - 1] = transition.T @ costates[idx]
+    xs = np.empty_like(costates)
+    xs[0] = x0
     for idx in range(n_steps):
-        u_cur = us[idx]
-        u_next = us[idx + 1]
-        t_mid = ts[idx] + 0.5 * dt
-        u_mid = B.T @ (expm(A.T * (horizon - t_mid)) @ v_opt)
-        x_cur = xs[idx]
+        xs[idx + 1] = transition @ xs[idx] + step_gramian @ costates[idx + 1]
 
-        k1 = A @ x_cur + B @ u_cur
-        k2 = A @ (x_cur + 0.5 * dt * k1) + B @ u_mid
-        k3 = A @ (x_cur + 0.5 * dt * k2) + B @ u_mid
-        k4 = A @ (x_cur + dt * k3) + B @ u_next
-        xs[idx + 1] = x_cur + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
-
-    terminal_error = float(np.linalg.norm(xs[-1] - xf))
+    metric_reg = reg if reg > 0 else 1e-6
     return {
-        "t": ts,
-        "x": xs,
-        "u": us,
-        "energy": min_energy,
-        "terminal_error": terminal_error,
-        "gramian_metrics": gramian_metrics(W, reg=reg),
+        "t": ts, "x": xs, "u": costates @ B,
+        "energy": input_energy, "input_energy": input_energy,
+        "terminal_error": terminal_error, "terminal_penalty": terminal_penalty,
+        "regularized_objective": input_energy + terminal_penalty,
+        "reachability_rank": int(gains.size), "rank_tolerance": rank_tol,
+        "exact_target_reachable": bool(reachable), "exact_target_energy": exact_energy,
+        "minimum_terminal_error": error_floor, "endpoint_numerical_atol": endpoint_atol,
+        "tolerance_comparison": [
+            _matched_endpoint(tol, gains, coordinates, error_floor, endpoint_atol)
+            for tol in endpoint_tolerances
+        ],
+        "gramian_metric_regularization": metric_reg,
+        "gramian_metrics": gramian_metrics(factor @ factor.T, reg=metric_reg),
     }
 
 
@@ -237,8 +304,8 @@ def select_actuators_submodular(
     tilde{F}(S_greedy) >= (1 - 1/e) tilde{F}(S*).
 
     Uses CELF Lazy Greedy acceleration (Minoux, 1978) with a max-heap priority queue of
-    marginal-gain upper bounds `Delta(i | S)` when `use_lazy=True`, returning the exact same
-    maximizer as exhaustive greedy (`use_lazy=False`) in far fewer determinant evaluations.
+    marginal-gain upper bounds `Delta(i | S)` when `use_lazy=True`, returning the greedy selection
+    with fewer evaluations when the stored upper bounds prune candidates.
     """
     n = A.shape[0]
     budget_k = min(max(1, budget_k), n)

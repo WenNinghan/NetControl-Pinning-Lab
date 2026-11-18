@@ -1,6 +1,6 @@
 """
 NetControl-Pinning-Lab: Complex Network Structural Controllability,
-Gramian Optimal Actuator Selection, and Graph Neural Pinning Control.
+Gramian-based Actuator Selection, and Graph Neural Pinning Control.
 """
 
 from .topologies import (
@@ -15,6 +15,7 @@ from .structural import (
     analyze_structural_controllability,
     classify_control_edges,
     verify_pbh_controllability,
+    verify_pbh_input_placement,
 )
 from .gramian_lqr import (
     compute_controllability_gramian,
@@ -41,6 +42,7 @@ __all__ = [
     "analyze_structural_controllability",
     "classify_control_edges",
     "verify_pbh_controllability",
+    "verify_pbh_input_placement",
     "compute_controllability_gramian",
     "compute_infinite_horizon_gramian",
     "stabilize_hurwitz_matrix",

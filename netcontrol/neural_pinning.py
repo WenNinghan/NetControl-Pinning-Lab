@@ -1,11 +1,9 @@
 """
 Nonlinear Complex Network Pinning Control & Differentiable Graph Neural Controller.
 
-Supports two realistic nonlinear coupled dynamics regimes:
-1. 'pollutant_cascade': Nonlinear reaction-diffusion ozone/pollutant cascade suppression
-   with Michaelis-Menten saturation and autocatalytic radical cross-activation.
-2. 'bistable_sync': Coupled Stuart-Landau / double-well bistable network steering from
-   an undesired high-excitation equilibrium to a target synchronized safe state.
+The two synthetic dynamics regimes combine a linear network term with a smooth
+node-wise saturation or a cubic term. States are signed coordinates; the simulated
+cascade does not enforce the positivity required of chemical concentrations.
 """
 
 from __future__ import annotations
@@ -16,6 +14,7 @@ import networkx as nx
 import numpy as np
 import torch
 import torch.nn as nn
+from scipy.integrate import trapezoid
 
 
 class GraphNeuralPinningController(nn.Module):
@@ -125,7 +124,7 @@ def _nonlinear_rhs_torch(
 ) -> torch.Tensor:
     """
     Differentiable right-hand side dx/dt for nonlinear coupled network dynamics.
-    Supports `x` of shape `(N,)` or `(B, N)`. Target safe equilibrium is `x_target = 0`.
+    Supports `x` of shape `(N,)` or `(B, N)`. The target equilibrium is `x_target = 0`.
     """
     lin_term = torch.matmul(x, A_lin.T)
     if regime == "pollutant_cascade":
@@ -186,7 +185,7 @@ def _compute_bolza_cost_torch(
     q_term: float,
 ) -> torch.Tensor:
     """
-    Exact trapezoidal quadrature of Bolza trajectory objective:
+    Trapezoidal estimate of the Bolza objective from sampled states and commands:
         J = int_0^T (q_state ||x(t)||_2^2 + r_ctrl ||u(t)||_2^2) dt + q_term ||x(T)||_2^2
     averaged across batch dimension if `xs` has shape `(T+1, B, N)`.
     """
@@ -197,6 +196,40 @@ def _compute_bolza_cost_torch(
     term = x_sq[-1]
     total = q_state * ise + r_ctrl * ctrl_e + q_term * term
     return torch.mean(total)
+
+
+def training_initial_states(x0: np.ndarray, count: int, seed: int) -> torch.Tensor:
+    """Build a fixed ensemble, including the reference initial condition."""
+    if count < 1:
+        raise ValueError("At least one training initial condition is required")
+    ref = np.asarray(x0, dtype=np.float32)
+    lo = max(0.3, float(ref.min()) * 0.75)
+    hi = max(1.0, float(ref.max()) * 1.20)
+    rng = np.random.default_rng(seed)
+    others = rng.uniform(lo, hi, size=(count - 1, ref.size)).astype(np.float32)
+    return torch.from_numpy(np.vstack([ref, others]))
+
+
+def fit_pinning_feedback(
+    controller: nn.Module, A: torch.Tensor, pinned_nodes: List[int], train_x: torch.Tensor,
+    horizon: float, n_steps: int, epochs: int, lr: float, q_state: float, r_ctrl: float,
+    q_term: float, regime: str,
+) -> List[float]:
+    """Fit a bounded feedback model on the fixed ensemble; track its reference loss."""
+    optimizer = torch.optim.Adam(controller.parameters(), lr=lr)
+    losses = []
+    for _ in range(epochs):
+        optimizer.zero_grad()
+        rollout = rollout_pinning_torch(A, train_x, pinned_nodes, controller, horizon, n_steps, regime)
+        loss = _compute_bolza_cost_torch(*rollout, q_state, r_ctrl, q_term)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(controller.parameters(), max_norm=5.0)
+        optimizer.step()
+        with torch.no_grad():
+            ref = rollout_pinning_torch(A, train_x[0], pinned_nodes, controller, horizon, n_steps, regime)
+            losses.append(float(_compute_bolza_cost_torch(*ref, q_state, r_ctrl, q_term).item()))
+    controller.eval()
+    return losses
 
 
 def train_neural_pinning_controller(
@@ -216,72 +249,40 @@ def train_neural_pinning_controller(
     regime: str = "pollutant_cascade",
     seed: int = 42,
 ) -> Tuple[GraphNeuralPinningController, List[float]]:
-    """
-    Train the GraphNeuralPinningController via differentiable RK4 trajectory optimization
-    across a diverse ensemble of initial states so the learned nonlinear feedback law
-    generalizes zero-shot across initial conditions.
-    """
+    """Train bounded one-hop neural feedback by differentiating the simulated trajectories."""
     torch.manual_seed(seed)
-    rng = np.random.default_rng(seed)
-    adj_norm, struct_feats = build_structural_features(G, driver_nodes)
-    controller = GraphNeuralPinningController(
-        n_nodes=G.number_of_nodes(),
-        pinned_nodes=pinned_nodes,
-        adj_norm=adj_norm,
-        struct_feats=struct_feats,
-        hidden_dim=32,
-        u_max=6.0,
-    )
+    adj, features = build_structural_features(G, driver_nodes)
+    controller = GraphNeuralPinningController(G.number_of_nodes(), pinned_nodes, adj, features)
+    train_x = training_initial_states(x0, n_train_inits, seed)
+    losses = fit_pinning_feedback(controller, torch.as_tensor(A, dtype=torch.float32), pinned_nodes,
+                                  train_x, horizon, n_steps, epochs, lr, q_state, r_ctrl, q_term, regime)
+    return controller, losses
 
-    A_t = torch.tensor(A, dtype=torch.float32)
-    x0_ref = np.asarray(x0, dtype=np.float32)
-    n_nodes = G.number_of_nodes()
 
-    if n_train_inits > 1:
-        inits = [x0_ref]
-        lo = float(np.min(x0_ref)) * 0.75
-        hi = float(np.max(x0_ref)) * 1.20
-        for _ in range(n_train_inits - 1):
-            inits.append(rng.uniform(max(0.3, lo), max(1.0, hi), size=n_nodes).astype(np.float32))
-        x0_batch_t = torch.tensor(np.stack(inits, axis=0), dtype=torch.float32)
-    else:
-        x0_batch_t = torch.tensor(x0_ref, dtype=torch.float32)
+def sampled_pinning_metrics(t, xs, us, q_state, r_ctrl, q_term):
+    """Score (time, batch, channel) trajectories using the benchmark's sampled-cost convention.
 
-    x0_eval_t = torch.tensor(x0_ref, dtype=torch.float32)
-    optimizer = torch.optim.Adam(controller.parameters(), lr=lr)
-    loss_history: List[float] = []
-
-    for _ in range(epochs):
-        optimizer.zero_grad()
-        ts_b, xs_b, us_b = rollout_pinning_torch(
-            A_lin=A_t,
-            x0=x0_batch_t,
-            pinned_nodes=pinned_nodes,
-            controller_fn=controller,
-            horizon=horizon,
-            n_steps=n_steps,
-            regime=regime,
-        )
-        loss = _compute_bolza_cost_torch(ts_b, xs_b, us_b, q_state, r_ctrl, q_term)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(controller.parameters(), max_norm=5.0)
-        optimizer.step()
-
-        with torch.no_grad():
-            ts_e, xs_e, us_e = rollout_pinning_torch(
-                A_lin=A_t,
-                x0=x0_eval_t,
-                pinned_nodes=pinned_nodes,
-                controller_fn=controller,
-                horizon=horizon,
-                n_steps=n_steps,
-                regime=regime,
-            )
-            eval_j = _compute_bolza_cost_torch(ts_e, xs_e, us_e, q_state, r_ctrl, q_term)
-            loss_history.append(float(eval_j.item()))
-
-    controller.eval()
-    return controller, loss_history
+    RK4 holds a command fixed during each step. For historical comparability the
+    reported cost samples the policy at both endpoints and uses trapezoidal sums.
+    'applied_input_energy' separately integrates the zero-order-held commands exactly.
+    """
+    x = np.asarray(xs, dtype=np.float64)
+    u = np.asarray(us, dtype=np.float64)
+    t = np.asarray(t, dtype=np.float64)
+    x_sq = (x * x).sum(axis=-1)
+    u_sq = (u * u).sum(axis=-1)
+    ise = trapezoid(x_sq, t, axis=0)
+    energy = trapezoid(u_sq, t, axis=0)
+    applied_energy = (np.diff(t)[:, None] * u_sq[:-1]).sum(axis=0)
+    running = q_state * ise + r_ctrl * energy
+    held_below = np.logical_and.accumulate((x_sq <= 0.15 ** 2 * x_sq[0])[::-1], axis=0)[::-1]
+    settled = np.where(held_below.any(axis=0), t[held_below.argmax(axis=0)], np.nan)
+    return {
+        "ise_state": ise, "control_energy": energy, "applied_input_energy": applied_energy,
+        "running_j": running, "total_j": running + q_term * x_sq[-1],
+        "terminal_norm": np.sqrt(x_sq[-1]), "minimum_coordinate": x.min(axis=(0, 2)),
+        "settling_time": settled,
+    }
 
 
 def simulate_nonlinear_pinning(
@@ -302,7 +303,7 @@ def simulate_nonlinear_pinning(
 ) -> Dict[str, np.ndarray | float]:
     """
     Evaluate a pinning control law on the nonlinear complex network and return
-    trajectories and exact trapezoidal Bolza control performance metrics:
+    trajectories and sampled trapezoidal Bolza cost metrics:
         J = int_0^T (q_state ||x(t)||_2^2 + r_ctrl ||u(t)||_2^2) dt + q_term ||x(T)||_2^2.
     """
     A_t = torch.tensor(A, dtype=torch.float32)
@@ -348,31 +349,8 @@ def simulate_nonlinear_pinning(
     u_np = us.numpy().astype(np.float64)
 
     state_norms = np.linalg.norm(x_np, axis=1)
-    ise_state = float(np.trapezoid(np.sum(x_np ** 2, axis=1), t_np))
-    control_energy = float(np.trapezoid(np.sum(u_np ** 2, axis=1), t_np))
-    terminal_norm = float(state_norms[-1])
-    terminal_sq = float(np.sum(x_np[-1] ** 2))
-    running_j = float(q_state * ise_state + r_ctrl * control_energy)
-    total_j = float(running_j + q_term * terminal_sq)
-
-    # Settling time T_s: first time step after which ||x(t)||_2 stays below 15% of ||x(0)||_2
-    thresh = 0.15 * float(state_norms[0])
-    below = state_norms <= thresh
-    settling_time = float(horizon)
-    for i in range(len(t_np)):
-        if np.all(below[i:]):
-            settling_time = float(t_np[i])
-            break
-
+    metrics = sampled_pinning_metrics(t_np, x_np[:, None, :], u_np[:, None, :], q_state, r_ctrl, q_term)
     return {
-        "t": t_np,
-        "x": x_np,
-        "u": u_np,
-        "state_norms": state_norms,
-        "ise_state": ise_state,
-        "control_energy": control_energy,
-        "running_j": running_j,
-        "total_j": total_j,
-        "terminal_norm": terminal_norm,
-        "settling_time": settling_time,
+        "t": t_np, "x": x_np, "u": u_np, "state_norms": state_norms,
+        **{k: float(value[0]) for k, value in metrics.items()},
     }

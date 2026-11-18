@@ -1,20 +1,7 @@
-"""
-Automated benchmark runner and 300-DPI publication-grade figure generator for NetControl-Pinning-Lab.
+"""Reproduce four experiments on synthetic directed networks.
 
-Styled to CCF-A / Top-Journal (IEEE TAC / Automatica / Nature Physics / Nature Communications)
-camera-ready standards: bold Times New Roman serif typography, STIX vector mathematics,
-4-sided #111111 boxed frames, inward ticks, and high-contrast academic color hierarchy.
-
-Generates:
-1. assets/driver_scaling_law.png: Driver node fraction n_D = N_D / N vs. average degree <k>
-   across Erdos-Renyi, Scale-Free (gamma=2.2, 2.8), and asymptotic theory.
-2. assets/network_control_topology.png: Directed reaction-cascade network control map highlighting
-   Matched vs. Minimum Driver Nodes and Critical / Ordinary / Redundant control links.
-3. assets/actuator_submodular_benchmark.png: Volumetric Controllability log det(W_c) and
-   Minimum Control Energy comparison across Submodular Greedy, Out-Degree, PageRank, Betweenness, and Random.
-4. assets/neural_pinning_trajectories.png: 4-panel comparison of Uncontrolled, Linear Pinning,
-   Gramian-LQR Pinning, and Differentiable Graph Neural Pinning Controller on nonlinear pollutant cascades.
-5. results/benchmark_summary.json & results/benchmark_table.csv.
+The figures and machine-readable records cover structural input wiring,
+finite-horizon actuator selection, and bounded feedback on held-out initial states.
 """
 
 from __future__ import annotations
@@ -23,6 +10,7 @@ import csv
 import json
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Iterable, Tuple
 
 import matplotlib
@@ -46,13 +34,13 @@ from netcontrol import (
     scale_free_directed,
     select_actuators_baseline,
     select_actuators_submodular,
-    simulate_nonlinear_pinning,
     small_world_directed,
-    solve_lqr_controller,
-    train_neural_pinning_controller,
     verify_pbh_controllability,
+    verify_pbh_input_placement,
 )
 from netcontrol.gramian_lqr import build_input_matrix
+
+from scripts.neural_pinning_comparison import LABELS, RECORDS, WEIGHTS, evaluate_feedback, mean_metric
 
 # High-contrast academic journal palette (IEEE TAC / Nature Physics)
 PALETTE_JOURNAL = {
@@ -239,36 +227,36 @@ def _finalize_journal_figure(
 
 
 def run_scaling_law_experiment(assets_dir: Path) -> dict:
-    """Experiment 1: Driver node fraction n_D vs average degree <k> across network families."""
+    """Finite graph sample: input-channel fraction and illustrative exponential reference."""
     k_values = [1.0, 1.5, 2.0, 3.0, 4.0, 5.5, 7.0, 9.0]
     n_nodes = 120
     n_trials = 5
-
-    curves = {
-        "Scale-Free (γ=2.2, Heterogeneous)": [],
-        "Scale-Free (γ=2.8, Moderate)": [],
-        "Erdős–Rényi (Random)": [],
-        "Theory: ER Asymptotic exp(-<k>/2)": [],
-    }
-
+    families = ["Scale-Free (γ=2.2, Heterogeneous)", "Scale-Free (γ=2.8, Moderate)",
+                "Erdős–Rényi (Random)"]
+    reference = "Reference: exp(-<k>/2)"
+    curves = {key: [] for key in [*families, reference]}
+    trials = []
     for k in k_values:
-        sf22, sf28, er_list = [], [], []
+        summaries = {key: [] for key in families}
         for trial in range(n_trials):
             seed = 1000 + int(k * 10) + trial
-            g_sf22 = scale_free_directed(n_nodes, mean_degree=k, gamma_exp=2.2, seed=seed)
-            g_sf28 = scale_free_directed(n_nodes, mean_degree=k, gamma_exp=2.8, seed=seed + 50)
-            g_er = erdos_renyi_directed(n_nodes, mean_degree=k, seed=seed + 100)
-
-            sf22.append(analyze_structural_controllability(g_sf22).driver_fraction)
-            sf28.append(analyze_structural_controllability(g_sf28).driver_fraction)
-            er_list.append(analyze_structural_controllability(g_er).driver_fraction)
-
-        curves["Scale-Free (γ=2.2, Heterogeneous)"].append((float(np.mean(sf22)), float(np.std(sf22))))
-        curves["Scale-Free (γ=2.8, Moderate)"].append((float(np.mean(sf28)), float(np.std(sf28))))
-        curves["Erdős–Rényi (Random)"].append((float(np.mean(er_list)), float(np.std(er_list))))
-        curves["Theory: ER Asymptotic exp(-<k>/2)"].append(
-            (float(max(1.0 / n_nodes, np.exp(-0.5 * k))), 0.0)
-        )
+            samples = [
+                (families[0], seed, scale_free_directed(n_nodes, mean_degree=k, gamma_exp=2.2, seed=seed)),
+                (families[1], seed + 50, scale_free_directed(n_nodes, mean_degree=k, gamma_exp=2.8, seed=seed + 50)),
+                (families[2], seed + 100, erdos_renyi_directed(n_nodes, mean_degree=k, seed=seed + 100)),
+            ]
+            for family, graph_seed, graph in samples:
+                result = analyze_structural_controllability(graph)
+                summaries[family].append(result.minimum_input_channels / n_nodes)
+                trials.append({
+                    "family": family, "target_mean_out_degree": k, "seed": graph_seed,
+                    "n_edges": graph.number_of_edges(),
+                    "minimum_input_channels": result.minimum_input_channels,
+                    "minimum_dedicated_sites": result.n_drivers,
+                })
+        for family, values in summaries.items():
+            curves[family].append((float(np.mean(values)), float(np.std(values))))
+        curves[reference].append((float(np.exp(-0.5 * k)), 0.0))
 
     fig, ax = plt.subplots(figsize=(8.4, 5.2))
     palette = {
@@ -290,11 +278,11 @@ def run_scaling_law_experiment(assets_dir: Path) -> dict:
             "-",
             "Erdős–Rényi (Random)",
         ),
-        "Theory: ER Asymptotic exp(-<k>/2)": (
+        reference: (
             PALETTE_JOURNAL["charcoal"],
             None,
             "--",
-            "Theory: ER Asymptotic $\\exp(-\\langle k \\rangle / 2)$",
+            "Reference $\\exp(-\\langle k \\rangle / 2)$",
         ),
     }
 
@@ -323,9 +311,9 @@ def run_scaling_law_experiment(assets_dir: Path) -> dict:
                 alpha=0.14,
             )
 
-    ax.set_xlabel("Average Directed Degree $\\langle k \\rangle$")
-    ax.set_ylabel("Minimum Driver Node Fraction $n_D = N_D / N$")
-    ax.set_title("Structural Controllability Scaling Law: Heterogeneity vs. Randomness", pad=8)
+    ax.set_xlabel("Target Mean Out-Degree $\\langle k \\rangle$")
+    ax.set_ylabel("Minimum independent inputs / number of states")
+    ax.set_title("Finite-network comparison (120 states; 5 graphs per point)", pad=8)
     ax.set_xlim(0.65, 9.35)
     ax.set_ylim(-0.02, 0.74)
     ax.legend(loc="upper right", frameon=True, fancybox=False, fontsize=9.0)
@@ -337,6 +325,13 @@ def run_scaling_law_experiment(assets_dir: Path) -> dict:
 
     return {
         "k_values": k_values,
+        "n_nodes": n_nodes,
+        "n_trials_per_family_per_degree": n_trials,
+        "plotted_quantity": "Minimum independent input channels / n_nodes (shared wiring permitted)",
+        "shading": "One descriptive standard deviation across the five sampled graphs",
+        "exponential_reference": [m for m, _ in curves[reference]],
+        "sf_gamma_2.8_mean_nD": [round(m, 4) for m, _ in curves[families[1]]],
+        "trials": trials,
         "sf_gamma_2.2_mean_nD": [round(m, 4) for m, _ in curves["Scale-Free (γ=2.2, Heterogeneous)"]],
         "er_mean_nD": [round(m, 4) for m, _ in curves["Erdős–Rényi (Random)"]],
     }
@@ -349,8 +344,21 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
     edge_classes = classify_control_edges(G)
     pbh_ok, pbh_rank = verify_pbh_controllability(G, sc_res.driver_nodes, seed=42)
 
+    # Two disconnected cyclic subsystems distinguish input channels from physical sites.
+    cycles = nx.DiGraph([(0, 1), (1, 0), (2, 3), (3, 2)])
+    cycle_layout = analyze_structural_controllability(cycles)
+    disjoint_cycles_control = {
+        "edges": list(cycles.edges()),
+        "dedicated_sites": cycle_layout.driver_nodes,
+        "minimum_input_channels": cycle_layout.minimum_input_channels,
+        "shared_input_sites": cycle_layout.shared_input_sites,
+        "pbh_rank_one_site": verify_pbh_controllability(cycles, [0])[1],
+        "pbh_rank_dedicated": verify_pbh_controllability(cycles, cycle_layout.driver_nodes)[1],
+        "pbh_rank_shared": verify_pbh_input_placement(cycles, cycle_layout.shared_input_sites)[1],
+    }
+
     fig, axes = plt.subplots(
-        1, 2, figsize=(13.4, 5.7), gridspec_kw={"width_ratios": [1.58, 1.0]}
+        1, 2, figsize=(13.4, 6.2), gridspec_kw={"width_ratios": [1.58, 1.0]}
     )
 
     # Panel (a): Hierarchical layout of Reaction Cascade Network
@@ -369,7 +377,7 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
             pos[u] = np.array([xs[idx], y_map[tier_name] + jitter_y])
 
     driver_set = set(sc_res.driver_nodes)
-    matched_nodes = [u for u in G.nodes() if u not in driver_set]
+    other_nodes = [u for u in G.nodes() if u not in driver_set]
 
     # Draw edges by criticality class
     edge_colors = {
@@ -400,7 +408,7 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
     nx.draw_networkx_nodes(
         G,
         pos,
-        nodelist=matched_nodes,
+        nodelist=other_nodes,
         ax=ax,
         node_color="#D4EFDF",
         node_size=265,
@@ -441,7 +449,7 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
             markeredgecolor=PALETTE_JOURNAL["emerald"],
             markeredgewidth=1.7,
             markersize=8.2,
-            label=f"Matched Nodes ({len(matched_nodes)})",
+            label=f"Other nodes ({len(other_nodes)})",
         ),
         Line2D(
             [0],
@@ -452,7 +460,7 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
             markeredgecolor=PALETTE_JOURNAL["ochre"],
             markeredgewidth=1.8,
             markersize=9.0,
-            label=f"Driver Nodes $N_D$ ({sc_res.n_drivers})",
+            label=f"Dedicated sites ({sc_res.n_drivers})",
         ),
         Line2D(
             [0],
@@ -482,7 +490,7 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
     ax.set_xlim(-0.85, 10.85)
     ax.set_ylim(-0.52, 2.96)
     ax.set_title(
-        f"(a) Ozone–Pollutant Cascade ($N = {sc_res.n_nodes}$, $N_D = {sc_res.n_drivers}$, "
+        f"(a) Synthetic cascade ($N = {sc_res.n_nodes}$, dedicated sites = {sc_res.n_drivers}, "
         f"$\\mathrm{{rank}}_{{\\mathrm{{PBH}}}} = {pbh_rank}/{sc_res.n_nodes}$)",
         pad=8,
     )
@@ -556,7 +564,7 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
         ax2.text(
             idx,
             1.025,
-            f"$n_D = {nd_val:.2f}$",
+            f"sites/N = {nd_val:.2f}",
             ha="center",
             va="bottom",
             fontsize=8.6,
@@ -567,7 +575,7 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
     ax2.set_xticklabels(topo_names, fontsize=9.0)
     ax2.set_ylim(0.0, 1.28)
     ax2.set_ylabel("Fraction of Directed Edges")
-    ax2.set_title("(b) Structural Control Link Classification", pad=8)
+    ax2.set_title("(b) Matching-based edge classification", pad=8)
     ax2.legend(
         loc="upper center",
         ncol=3,
@@ -578,7 +586,16 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
         fancybox=False,
     )
 
-    fig.tight_layout(pad=1.15)
+    fig.tight_layout(pad=1.15, rect=(0, 0.14, 1, 1))
+    fig.text(0.50, 0.115, "(c) Two disconnected cycles: where the input is wired", ha="center", fontsize=11)
+    checks = [
+        ("One signal at node 0", "pbh_rank_one_site"),
+        ("Separate signals at nodes 0 and 2", "pbh_rank_dedicated"),
+        ("One shared signal at nodes 0 and 2", "pbh_rank_shared"),
+    ]
+    for x, (label, rank_key) in zip((0.17, 0.50, 0.83), checks):
+        rank = disjoint_cycles_control[rank_key]
+        fig.text(x, 0.065, f"{label}\nMinimum PBH rank {rank}/{len(cycles)}", ha="center", va="center", fontsize=9.4)
     _finalize_journal_figure(fig, categorical_axes=(ax2,), topology_axes=(ax,))
     fig.savefig(assets_dir / "network_control_topology.png")
     plt.close(fig)
@@ -587,6 +604,16 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
         "n_nodes": sc_res.n_nodes,
         "n_edges": sc_res.n_edges,
         "n_drivers": sc_res.n_drivers,
+        "dedicated_sites": sc_res.driver_nodes,
+        "minimum_input_channels": sc_res.minimum_input_channels,
+        "shared_input_sites": sc_res.shared_input_sites,
+        "source_components": sc_res.source_components,
+        "maximum_matching": sc_res.matching_pairs,
+        "graph_seed": 42,
+        "pbh_realization": "seed 42, generic edge weights on graph support, dedicated inputs",
+        "edge_classification_basis": "Matching membership and increase of minimum independent channel count",
+        "edges_by_class": edge_classes,
+        "two_disjoint_cycles_control": disjoint_cycles_control,
         "driver_fraction": round(sc_res.driver_fraction, 4),
         "pbh_full_rank_verified": pbh_ok,
         "pbh_rank": pbh_rank,
@@ -595,400 +622,193 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
 
 
 def run_submodular_gramian_experiment(assets_dir: Path) -> dict:
-    """Experiment 3: Submodular greedy actuator selection vs centrality baselines."""
+    """Compare actuator coverage, effort and endpoint error on a seeded linear cascade."""
     G = reaction_cascade_network(n=30, branch_factor=2.3, seed=7)
     A = build_continuous_system_matrix(G, damping=1.15, coupling=0.38)
     budgets = [4, 6, 8, 10, 12, 15]
-
-    methods = ["Submodular Greedy (Ours)", "Out-Degree Hubs", "PageRank", "Betweenness", "Random"]
-    logdet_records = {m: [] for m in methods}
-    energy_records = {m: [] for m in methods}
-
-    rng = np.random.default_rng(42)
-    x0 = rng.uniform(0.8, 2.0, size=G.number_of_nodes())
-    xf = np.zeros(G.number_of_nodes())
-
-    for k in budgets:
-        sel_sub, m_sub = select_actuators_submodular(A, budget_k=k, horizon=2.0, reg=1e-5)
-        B_sub = build_input_matrix(G.number_of_nodes(), sel_sub)
-        traj_sub = minimum_energy_trajectory(A, B_sub, x0, xf, horizon=2.0, reg=1e-4)
-        logdet_records["Submodular Greedy (Ours)"].append(m_sub["log_det"])
-        energy_records["Submodular Greedy (Ours)"].append(float(traj_sub["energy"]))
-
-        for m_label, strat_key in [
-            ("Out-Degree Hubs", "out_degree"),
-            ("PageRank", "pagerank"),
-            ("Betweenness", "betweenness"),
-            ("Random", "random"),
-        ]:
-            sel_b, m_b = select_actuators_baseline(
-                G, A, budget_k=k, strategy=strat_key, horizon=2.0, reg=1e-5, seed=42 + k
-            )
-            B_b = build_input_matrix(G.number_of_nodes(), sel_b)
-            traj_b = minimum_energy_trajectory(A, B_b, x0, xf, horizon=2.0, reg=1e-4)
-            logdet_records[m_label].append(m_b["log_det"])
-            energy_records[m_label].append(float(traj_b["energy"]))
-
-    fig, axes = plt.subplots(1, 2, figsize=(12.6, 5.0))
-    style_map = {
-        "Submodular Greedy (Ours)": (PALETTE_JOURNAL["crimson"], "o", "-", 2.6),
-        "Out-Degree Hubs": (PALETTE_JOURNAL["navy"], "s", "--", 2.0),
-        "PageRank": (PALETTE_JOURNAL["emerald"], "^", "-.", 2.0),
-        "Betweenness": (PALETTE_JOURNAL["plum"], "D", ":", 2.0),
-        "Random": (PALETTE_JOURNAL["slate"], "X", ":", 1.7),
+    horizon, selection_ridge, steering_ridge = 2.0, 1e-5, 1e-4
+    tolerances = (0.45, 0.50)
+    x0 = np.random.default_rng(42).uniform(0.8, 2.0, size=len(A))
+    xf = np.zeros_like(x0)
+    methods = {
+        "Submodular Greedy": "greedy", "Out-Degree Hubs": "out_degree",
+        "PageRank": "pagerank", "Betweenness": "betweenness", "Random": "random",
     }
+    rows = []
+    for k in budgets:
+        for name, strategy in methods.items():
+            audit = {}
+            if strategy == "greedy":
+                selected, metrics = select_actuators_submodular(A, k, horizon, selection_ridge)
+                naive, naive_metrics = select_actuators_submodular(
+                    A, k, horizon, selection_ridge, use_lazy=False
+                )
+                audit = {
+                    "naive_selected_nodes": naive,
+                    "same_order_as_naive_greedy": selected == naive,
+                    "celf_marginal_evaluations": int(metrics["num_marginal_evals"]),
+                    "naive_marginal_evaluations": int(naive_metrics["num_marginal_evals"]),
+                }
+            else:
+                selected, metrics = select_actuators_baseline(
+                    G, A, k, strategy=strategy, horizon=horizon,
+                    reg=selection_ridge, seed=42 + k,
+                )
+            B = build_input_matrix(len(A), selected)
+            trajectory = minimum_energy_trajectory(
+                A, B, x0, xf, horizon=horizon, reg=steering_ridge,
+                endpoint_tolerances=tolerances,
+            )
+            row = {
+                "budget": k, "strategy": name, "selected_nodes": selected,
+                "log_det": metrics["log_det"], "normalized_log_det": metrics["normalized_log_det"],
+                "terminal_state": trajectory["x"][-1].tolist(), **audit,
+            }
+            for key in ("input_energy", "terminal_error", "terminal_penalty",
+                        "regularized_objective", "reachability_rank", "rank_tolerance",
+                        "minimum_terminal_error", "exact_target_reachable", "exact_target_energy",
+                        "endpoint_numerical_atol", "tolerance_comparison"):
+                row[key] = trajectory[key]
+            rows.append(row)
 
-    for m_label in methods:
-        c, mk, ls, lw = style_map[m_label]
-        axes[0].plot(
-            budgets,
-            logdet_records[m_label],
-            label=m_label,
-            color=c,
-            marker=mk,
-            markersize=6.0,
-            markeredgecolor="#111111",
-            markeredgewidth=0.55,
-            linestyle=ls,
-            linewidth=lw,
-        )
-        axes[1].plot(
-            budgets,
-            energy_records[m_label],
-            label=m_label,
-            color=c,
-            marker=mk,
-            markersize=6.0,
-            markeredgecolor="#111111",
-            markeredgewidth=0.55,
-            linestyle=ls,
-            linewidth=lw,
-        )
-
-    axes[0].set_xlabel("Actuator Node Budget $K = |S_{\\mathrm{pin}}|$")
-    axes[0].set_ylabel("Volumetric Controllability $\\log\\det(\\mathbf{W}_c + \\varepsilon \\mathbf{I})$")
-    axes[0].set_title("(a) Submodular Gramian Maximization", pad=8)
-    axes[0].set_xlim(3.4, 15.6)
-    axes[0].set_ylim(-292.0, -82.0)
-    axes[0].legend(loc="upper left", fontsize=8.4, frameon=True, fancybox=False)
-
-    axes[1].set_yscale("log")
-    axes[1].set_xlabel("Actuator Node Budget $K = |S_{\\mathrm{pin}}|$")
-    axes[1].set_ylabel("Minimum Steering Energy $E^*(\\mathbf{x}_0 \\to \\mathbf{0})$ (Log Scale)")
-    axes[1].set_title("(b) Pontryagin Minimum Control Energy vs. Budget", pad=8)
-    axes[1].set_xlim(3.4, 15.6)
-    axes[1].set_ylim(1.2e2, 2.4e4)
-    axes[1].legend(loc="upper right", fontsize=8.4, frameon=True, fancybox=False)
-
-    fig.tight_layout(pad=1.15)
+    styles = [
+        ("crimson", "o"), ("navy", "s"), ("emerald", "^"), ("plum", "D"), ("slate", "X"),
+    ]
+    fig, axes = plt.subplots(2, 2, figsize=(11.2, 7.6))
+    panels = [
+        ("normalized_log_det", "Normalized log determinant", "(a) Reachable volume"),
+        ("input_energy", "Continuous input energy", "(b) Input energy, fixed terminal penalty"),
+        ("terminal_error", "Terminal state error (L2 norm)", "(c) Residual, fixed terminal penalty"),
+    ]
+    for (name, (color, marker)) in zip(methods, styles):
+        series = [row for row in rows if row["strategy"] == name]
+        options = {"color": PALETTE_JOURNAL[color], "marker": marker, "label": name}
+        for ax, (metric, _, _) in zip(axes.flat, panels):
+            ax.plot(budgets, [row[metric] for row in series], **options)
+        ref = next(row for row in series if row["budget"] == 10)
+        matches = ref["tolerance_comparison"]
+        axes[1, 1].plot(tolerances, [
+            v["input_energy"] if v["feasible"] else np.nan for v in matches
+        ], **options)
+    for ax, (_, ylabel, title) in zip(axes.flat, panels):
+        ax.set(xlabel="Actuator budget", ylabel=ylabel, title=title, xticks=budgets)
+    axes[1, 1].set(xlabel="Allowed terminal error (L2 norm)", ylabel="Minimum input energy",
+                   title="(d) Matched endpoint tolerance, 10 actuators", yscale="log",
+                   xticks=tolerances, xticklabels=["0.45", "0.50"])
+    axes[1, 1].margins(x=0.15)
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, labels, ncol=5, loc="lower center", fontsize=9)
+    fig.tight_layout(rect=(0, 0.045, 1, 1), pad=1.1)
     _finalize_journal_figure(fig)
     fig.savefig(assets_dir / "actuator_submodular_benchmark.png")
     plt.close(fig)
 
-    k_idx = budgets.index(10)
     return {
         "budgets": budgets,
-        "budget_10_comparison": {
-            m: {
-                "log_det": round(logdet_records[m][k_idx], 3),
-                "min_energy": round(energy_records[m][k_idx], 3),
-            }
-            for m in methods
+        "protocol": {
+            "nodes": len(A), "node_order": list(range(len(A))), "graph_seed": 7,
+            "branch_factor": 2.3, "damping": 1.15, "coupling": 0.38, "laplacian_weight": 0.5,
+            "initial_state_seed": 42, "random_selection_seed": "42 + budget",
+            "horizon": horizon, "selection_ridge": selection_ridge, "steering_ridge": steering_ridge,
+            "trajectory_steps": 80, "endpoint_tolerances": list(tolerances),
+            "inputs": "Unbounded continuous inputs on selected coordinates",
+            "energy": "Integral of squared input over [0,T]",
+            "regularized_objective": "input_energy + terminal_error^2 / steering_ridge",
+            "exact_target_energy": "Minimum energy when target displacement lies in numerical reachable subspace; null otherwise",
+            "rank": "SVD of a square-root finite-horizon Gramian; absolute singular-value cutoff saved for each row",
         },
+        "system_matrix": A.tolist(), "initial_state": x0.tolist(), "target_state": xf.tolist(),
+        "graph_edges": [[int(u), int(v), float(attrs["weight"])] for u, v, attrs in G.edges(data=True)],
+        "budget_10_comparison": {row["strategy"]: row for row in rows if row["budget"] == 10},
+        "runs": rows,
     }
 
 
 def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
-    """Experiment 4: Nonlinear Pollutant Cascade Suppression with Graph Neural Pinning Control."""
-    G = reaction_cascade_network(n=28, branch_factor=2.3, seed=2026)
-    A = build_continuous_system_matrix(G, damping=0.55, coupling=0.36)
-    sc = analyze_structural_controllability(G)
+    """Compare feedback on the same synthetic graph; train each learned policy once."""
+    results_dir = assets_dir.parent / "results"
+    record = evaluate_feedback(results_dir)
+    splits = record["splits"]
+    seen = splits["reference_in_training"][0]["scores"]
+    table = []
+    for method, label in LABELS.items():
+        values = seen[method]
+        settled = values["settling_time"]
+        table.append({
+            "strategy": label,
+            "ise_state": round(values["ise_state"], 4),
+            "control_energy": round(values["control_energy"], 4),
+            "applied_input_energy": round(values["applied_input_energy"], 4),
+            "running_cost_J": round(values["running_j"], 4),
+            "total_cost_J": round(values["total_j"], 4),
+            "terminal_norm": round(values["terminal_norm"], 4),
+            "settling_time_s": None if settled is None else round(settled, 3),
+        })
+    stats = {}
+    for split in ("original_10", "additional_80"):
+        trials = splits[split]
+        stats[split] = {}
+        for method in LABELS:
+            values = {field: mean_metric(trials, method, field)
+                      for field in ("ise_state", "control_energy", "applied_input_energy",
+                                    "running_j", "total_j", "terminal_norm")}
+            negatives = [r["scores"][method]["minimum_coordinate"] for r in trials]
+            values.update(n=len(trials), minimum_coordinate=min(negatives),
+                          negative_trajectories=sum(v < -1e-6 for v in negatives))
+            stats[split][method] = values
 
-    budget_k = 8
-    pinned_sub, _ = select_actuators_submodular(
-        A, budget_k=budget_k, horizon=2.5, mandatory_nodes=sc.driver_nodes[:4]
-    )
-    B_pin = build_input_matrix(G.number_of_nodes(), pinned_sub)
-    # Exact fair LQR baseline using the identical (q_weight=3.0, r_weight=0.08) weights
-    K_lqr, _ = solve_lqr_controller(A, B_pin, q_weight=3.0, r_weight=0.08)
-
-    rng = np.random.default_rng(2026)
-    x0 = rng.uniform(1.2, 2.8, size=G.number_of_nodes())
-
-    gnn_ctrl, train_losses = train_neural_pinning_controller(
-        G=G,
-        A=A,
-        pinned_nodes=pinned_sub,
-        driver_nodes=sc.driver_nodes,
-        x0=x0,
-        horizon=4.0,
-        n_steps=80,
-        epochs=55,
-        lr=0.035,
-        q_state=3.0,
-        r_ctrl=0.08,
-        q_term=12.0,
-        n_train_inits=8,
-        regime="pollutant_cascade",
-        seed=2026,
-    )
-
-    # Also compare random actuator placement with linear pinning
-    pinned_rand, _ = select_actuators_baseline(G, A, budget_k=budget_k, strategy="random", seed=99)
-
-    sim_uncontrolled = simulate_nonlinear_pinning(
-        A, x0, pinned_sub, mode="uncontrolled", horizon=4.0, n_steps=80
-    )
-    sim_rand_lin = simulate_nonlinear_pinning(
-        A, x0, pinned_rand, mode="linear_pinning", kp_linear=2.4, horizon=4.0, n_steps=80
-    )
-    sim_sub_lin = simulate_nonlinear_pinning(
-        A, x0, pinned_sub, mode="linear_pinning", kp_linear=2.4, horizon=4.0, n_steps=80
-    )
-    sim_lqr = simulate_nonlinear_pinning(
-        A, x0, pinned_sub, mode="lqr_pinning", K_lqr=K_lqr, horizon=4.0, n_steps=80
-    )
-    sim_gnn = simulate_nonlinear_pinning(
-        A, x0, pinned_sub, mode="gnn_pinning", gnn_controller=gnn_ctrl, horizon=4.0, n_steps=80
-    )
-
-    fig, axes = plt.subplots(2, 2, figsize=(12.8, 8.8))
-
-    # Panel (a): State Norm ||x(t)||_2 Trajectory
-    ax = axes[0, 0]
-    ts = sim_gnn["t"]
-    ax.plot(
-        ts,
-        sim_uncontrolled["state_norms"],
-        label="Uncontrolled Cascade",
-        color=PALETTE_JOURNAL["slate"],
-        linestyle=":",
-        linewidth=2.2,
-    )
-    ax.plot(
-        ts,
-        sim_rand_lin["state_norms"],
-        label="Random Pinning + Linear Gain",
-        color=PALETTE_JOURNAL["ochre"],
-        linestyle="--",
-        linewidth=2.0,
-    )
-    ax.plot(
-        ts,
-        sim_sub_lin["state_norms"],
-        label="Submodular Pinning + Linear Gain",
-        color=PALETTE_JOURNAL["navy"],
-        linestyle="-.",
-        linewidth=2.1,
-    )
-    ax.plot(
-        ts,
-        sim_lqr["state_norms"],
-        label="Submodular Pinning + CARE LQR",
-        color=PALETTE_JOURNAL["emerald"],
-        linestyle="-",
-        linewidth=2.2,
-    )
-    ax.plot(
-        ts,
-        sim_gnn["state_norms"],
-        label="Submodular + Graph Neural Pinning (Ours)",
-        color=PALETTE_JOURNAL["crimson"],
-        linestyle="-",
-        linewidth=2.7,
-    )
-    ax.axhline(
-        0.15 * float(sim_gnn["state_norms"][0]),
-        color="#111111",
-        linestyle="--",
-        linewidth=1.3,
-        alpha=0.75,
-        label="15% Safe Threshold",
-    )
-    ax.set_xlabel("Time $t$ ($\\mathrm{s}$)")
-    ax.set_ylabel("Network Pollutant Norm $||\\mathbf{x}(t)||_2$")
-    ax.set_title("(a) Nonlinear Cascade State Suppression", pad=8)
-    ax.set_xlim(-0.1, 4.1)
-    ax.set_ylim(0.8, 12.1)
-    # Place legend strictly between y=2.0 (above 1.62 threshold) and y=6.3 (below trajectories at t < 1.9)
-    ax.legend(
-        loc="lower left",
-        bbox_to_anchor=(0.02, 0.11),
-        fontsize=7.9,
-        frameon=True,
-        fancybox=False,
-    )
-
-    # Panel (b): Individual Node Trajectories under Graph Neural Pinning
-    ax = axes[0, 1]
-    x_gnn = sim_gnn["x"]
-    ax.axhline(0.0, color="#111111", linestyle=":", linewidth=1.0, alpha=0.55)
-    for i in range(G.number_of_nodes()):
-        is_pin = i in set(pinned_sub)
-        ax.plot(
-            ts,
-            x_gnn[:, i],
-            color=PALETTE_JOURNAL["crimson"] if is_pin else PALETTE_JOURNAL["navy"],
-            alpha=0.88 if is_pin else 0.30,
-            linewidth=1.65 if is_pin else 1.05,
-        )
-    ax.plot(
-        [],
-        [],
-        color=PALETTE_JOURNAL["crimson"],
-        linewidth=1.9,
-        label=f"Pinned Actuator Nodes ($K = {budget_k}$)",
-    )
-    ax.plot(
-        [],
-        [],
-        color=PALETTE_JOURNAL["navy"],
-        alpha=0.65,
-        linewidth=1.3,
-        label=f"Unpinned Network Nodes ($N - K = {G.number_of_nodes() - budget_k}$)",
-    )
-    ax.set_xlabel("Time $t$ ($\\mathrm{s}$)")
-    ax.set_ylabel("Node Concentration $x_i(t)$")
-    ax.set_title("(b) Node-Level Synchronization to Safe Equilibrium", pad=8)
-    ax.set_xlim(-0.1, 4.1)
-    ax.set_ylim(-2.90, 3.45)
-    ax.legend(loc="upper right", fontsize=8.4, frameon=True, fancybox=False)
-
-    # Panel (c): Control Input Signals u_P(t) for Graph Neural Pinning
-    ax = axes[1, 0]
-    u_gnn = sim_gnn["u"]
-    node_colors = [
-        PALETTE_JOURNAL["navy"],
-        PALETTE_JOURNAL["emerald"],
-        PALETTE_JOURNAL["crimson"],
-        PALETTE_JOURNAL["ochre"],
-        PALETTE_JOURNAL["plum"],
-        PALETTE_JOURNAL["slate"],
-        PALETTE_JOURNAL["teal"],
-        PALETTE_JOURNAL["gold"],
-    ]
-    ax.axhline(0.0, color="#111111", linestyle=":", linewidth=1.0, alpha=0.55)
-    for j, node_id in enumerate(pinned_sub):
-        ax.plot(
-            ts,
-            u_gnn[:, j],
-            color=node_colors[j % len(node_colors)],
-            linewidth=1.75,
-            label=f"Node #{node_id}",
-        )
-    ax.set_xlabel("Time $t$ ($\\mathrm{s}$)")
-    ax.set_ylabel("Pinning Control Input $u_i(t)$")
-    ax.set_title("(c) Bounded Graph Neural Control Actions $\\mathbf{u}_{\\mathrm{pin}}(t)$", pad=8)
-    ax.set_xlim(-0.1, 4.1)
-    ax.set_ylim(-6.55, 2.95)
-    ax.legend(loc="lower right", ncol=2, fontsize=8.0, frameon=True, fancybox=False)
-
-    # Panel (d): Differentiable ODE Training Convergence
-    ax = axes[1, 1]
-    epochs_arr = np.arange(1, len(train_losses) + 1)
-    ax.plot(
-        epochs_arr,
-        train_losses,
-        color=PALETTE_JOURNAL["plum"],
-        marker="o",
-        markersize=3.8,
-        markeredgecolor="#111111",
-        markeredgewidth=0.45,
-        linewidth=2.2,
-        label="RK4 Adjoint Cost $J(\\boldsymbol{\\theta})$",
-    )
-    loss_drop_pct = 100.0 * (train_losses[-1] - train_losses[0]) / max(1e-9, train_losses[0])
-    ax.text(
-        0.44,
-        0.54,
-        f"Initial Loss: ${train_losses[0]:.1f}$\n"
-        f"Converged Loss: ${train_losses[-1]:.1f}$\n"
-        f"Reduction: ${loss_drop_pct:.1f}\\%$",
-        transform=ax.transAxes,
-        fontsize=8.8,
-        bbox=dict(boxstyle="square,pad=0.34", fc="#F8F9F9", ec="#111111", lw=1.0, alpha=0.96),
-    )
-    ax.set_xlabel("Differentiable RK4 Training Epoch")
-    ax.set_ylabel("Total Trajectory Cost $J(\\boldsymbol{\\theta})$")
-    ax.set_title("(d) Differentiable Graph Neural Controller Optimization", pad=8)
-    ax.set_xlim(0.0, len(train_losses) + 1.5)
-    y_lo = min(train_losses) * 0.93
-    y_hi = max(train_losses) * 1.07
-    ax.set_ylim(y_lo, y_hi)
-    ax.legend(loc="upper right", fontsize=8.4, frameon=True, fancybox=False)
-
-    fig.tight_layout(pad=1.15)
+    methods = ("care", "finite_lqr", "local_linear", "full_linear", "self_only", "gnn")
+    y = np.arange(len(methods))
+    fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.35), sharey=True)
+    for ax, field, caption in zip(axes, ("total_j", "applied_input_energy"),
+                                  ("(a) Mean total cost $J$", "(b) Mean applied input energy")):
+        for shift, split, label, marker, color in [
+            (-0.13, "original_10", "Original 10 initial states", "o", PALETTE_JOURNAL["navy"]),
+            (0.13, "additional_80", "Additional 80 initial states", "D", PALETTE_JOURNAL["ochre"]),
+        ]:
+            means = [stats[split][m][field] for m in methods]
+            ax.scatter(means, y + shift, marker=marker, color=color, s=36, label=label, zorder=3)
+        ax.set_yticks(y, [LABELS[m] for m in methods])
+        ax.set_xlabel(caption)
+        ax.set_ylim(len(methods) - 0.5, -0.5)
+    axes[0].legend(loc="lower center", bbox_to_anchor=(0.93, 1.04), ncol=2, frameon=False)
+    fig.subplots_adjust(left=0.19, right=0.98, bottom=0.18, top=0.84, wspace=0.08)
     _finalize_journal_figure(fig)
     fig.savefig(assets_dir / "neural_pinning_trajectories.png")
     plt.close(fig)
 
-    # Evaluate zero-shot generalization across 10 unseen random initial states
-    rng_test = np.random.default_rng(9090)
-    unseen_lqr_j, unseen_gnn_j, unseen_lqr_ise, unseen_gnn_ise = [], [], [], []
-    for _ in range(10):
-        x0_unseen = rng_test.uniform(1.0, 3.0, size=G.number_of_nodes())
-        s_lqr_u = simulate_nonlinear_pinning(
-            A, x0_unseen, pinned_sub, mode="lqr_pinning", K_lqr=K_lqr, horizon=4.0, n_steps=80
-        )
-        s_gnn_u = simulate_nonlinear_pinning(
-            A, x0_unseen, pinned_sub, mode="gnn_pinning", gnn_controller=gnn_ctrl, horizon=4.0, n_steps=80
-        )
-        unseen_lqr_j.append(float(s_lqr_u["total_j"]))
-        unseen_gnn_j.append(float(s_gnn_u["total_j"]))
-        unseen_lqr_ise.append(float(s_lqr_u["ise_state"]))
-        unseen_gnn_ise.append(float(s_gnn_u["ise_state"]))
-
-    rows = []
-    for name, sim in [
-        ("Uncontrolled Cascade", sim_uncontrolled),
-        ("Random Pinning + Linear Feedback", sim_rand_lin),
-        ("Submodular Pinning + Linear Feedback", sim_sub_lin),
-        ("Submodular Pinning + Algebraic Riccati LQR", sim_lqr),
-        ("Submodular Pinning + Graph Neural Controller (Ours)", sim_gnn),
-    ]:
-        rows.append(
-            {
-                "strategy": name,
-                "ise_state": round(float(sim["ise_state"]), 4),
-                "control_energy": round(float(sim["control_energy"]), 4),
-                "running_cost_J": round(float(sim["running_j"]), 4),
-                "total_cost_J": round(float(sim["total_j"]), 4),
-                "terminal_norm": round(float(sim["terminal_norm"]), 4),
-                "settling_time_s": round(float(sim["settling_time"]), 3),
-            }
-        )
-
+    primary = stats["original_10"]
+    history = record["reference_loss_history"]["gnn"]
     return {
-        "n_nodes": G.number_of_nodes(),
-        "budget_k": budget_k,
-        "selected_pinned_nodes": pinned_sub,
-        "training_initial_loss": round(train_losses[0], 4),
-        "training_final_loss": round(train_losses[-1], 4),
+        "n_nodes": 28, "budget_k": 8, "selected_pinned_nodes": record["protocol"]["pinned_nodes"],
+        "training_initial_loss": round(history[0], 4), "training_final_loss": round(history[-1], 4),
         "unseen_initial_states_eval": {
-            "n_unseen_trials": 10,
-            "lqr_mean_ise": round(float(np.mean(unseen_lqr_ise)), 4),
-            "gnn_mean_ise": round(float(np.mean(unseen_gnn_ise)), 4),
-            "lqr_mean_total_J": round(float(np.mean(unseen_lqr_j)), 4),
-            "gnn_mean_total_J": round(float(np.mean(unseen_gnn_j)), 4),
+            "n_unseen_trials": len(splits["original_10"]),
+            "lqr_mean_ise": round(primary["care"]["ise_state"], 4),
+            "gnn_mean_ise": round(primary["gnn"]["ise_state"], 4),
+            "lqr_mean_total_J": round(primary["care"]["total_j"], 4),
+            "gnn_mean_total_J": round(primary["gnn"]["total_j"], 4),
         },
-        "comparison": rows,
-    }, rows
+        "per_initial_state_file": RECORDS, "trained_weights_file": WEIGHTS,
+        "replay_command": "python -m scripts.neural_pinning_comparison --replay",
+        "held_out_mean_metrics": stats, "comparison": table,
+    }, table
 
 
-def main() -> None:
+def run_all(output_dir: Path) -> None:
     configure_mpl_style()
-    assets_dir = ROOT / "assets"
-    results_dir = ROOT / "results"
+    assets_dir = output_dir / "assets"
+    results_dir = output_dir / "results"
     assets_dir.mkdir(parents=True, exist_ok=True)
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    print("[1/4] Running Structural Controllability Scaling Law benchmark...")
+    print("[1/4] Comparing minimum input channels across finite graph samples...")
     exp1 = run_scaling_law_experiment(assets_dir)
 
-    print("[2/4] Running Reaction Cascade Topology & Link Criticality analysis...")
+    print("[2/4] Checking cascade input wiring and matching-based edge classes...")
     exp2 = run_topology_and_link_classification(assets_dir)
 
-    print("[3/4] Running Submodular Controllability Gramian & Minimum Energy benchmark...")
+    print("[3/4] Comparing actuator reachability, input energy and terminal error...")
     exp3 = run_submodular_gramian_experiment(assets_dir)
 
     print("[4/4] Training & evaluating Differentiable Graph Neural Pinning Controller...")
@@ -1002,7 +822,8 @@ def main() -> None:
     }
 
     with open(results_dir / "benchmark_summary.json", "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
+        json.dump(summary, f, indent=2, ensure_ascii=False, allow_nan=False)
+        f.write("\n")
 
     with open(results_dir / "benchmark_table.csv", "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(
@@ -1011,6 +832,7 @@ def main() -> None:
                 "strategy",
                 "ise_state",
                 "control_energy",
+                "applied_input_energy",
                 "running_cost_J",
                 "total_cost_J",
                 "terminal_norm",
@@ -1020,6 +842,16 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(table_rows)
 
+
+def main() -> None:
+    with TemporaryDirectory(dir=ROOT) as temp:
+        output = Path(temp)
+        run_all(output)
+        for folder in ("assets", "results"):
+            destination = ROOT / folder
+            destination.mkdir(exist_ok=True)
+            for result in (output / folder).iterdir():
+                result.replace(destination / result.name)
     print("All benchmarks completed successfully. Results saved to results/ and assets/.")
 
 

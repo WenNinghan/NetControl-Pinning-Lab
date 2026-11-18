@@ -1,6 +1,10 @@
-strategy,ise_state,control_energy,running_cost_J,total_cost_J,terminal_norm,settling_time_s
-Uncontrolled Cascade,495.3876,0.0,1486.1629,2927.5977,10.9599,4.0
-Random Pinning + Linear Feedback,323.6251,61.8788,975.8257,1822.5342,8.3999,4.0
-Submodular Pinning + Linear Feedback,253.8185,35.356,764.284,1247.0006,6.3424,4.0
-Submodular Pinning + Algebraic Riccati LQR,185.1256,127.209,565.5534,794.0016,4.3632,4.0
-Submodular Pinning + Graph Neural Controller (Ours),178.7584,217.4557,553.6717,684.3321,3.2998,4.0
+strategy,ise_state,control_energy,applied_input_energy,running_cost_J,total_cost_J,terminal_norm,settling_time_s
+Uncontrolled cascade,495.3876,0.0,0.0,1486.1629,2927.5977,10.9599,
+Random actuators + proportional,323.6251,61.8788,64.9362,975.8257,1822.5342,8.3999,
+Gramian selection + proportional,253.8185,35.356,38.4703,764.284,1247.0006,6.3424,
+CARE LQR,185.1256,127.209,134.3007,565.5534,794.0016,4.3632,
+Finite-horizon LQR,184.4486,146.5915,149.6649,565.073,753.9623,3.9675,
+Trained one-hop linear,176.639,192.5925,199.682,545.3245,706.2452,3.662,
+Trained full-state linear,179.5972,195.2167,202.3391,554.4089,681.0704,3.2489,
+Self-only neural,204.2932,180.2046,186.1507,627.2961,1036.8675,5.8422,
+One-hop GNN,179.1812,227.6772,234.8669,555.7579,685.9444,3.2938,

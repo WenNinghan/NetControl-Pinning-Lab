@@ -1,16 +1,18 @@
 """
-Exact Structural Controllability via Liu-Slotine-Barabasi (Nature 2011)
-Maximum Bipartite Matching, Edge Criticality Classification, and PBH Verification.
+Generic structural controllability for dedicated actuators and shared signals.
+Matching-based edge classification and numerical PBH tests of explicit input layouts.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, List, Set, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Sequence, Set, Tuple
 
 import networkx as nx
 import numpy as np
 from networkx.algorithms import bipartite
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import min_weight_full_bipartite_matching
 
 
 @dataclass
@@ -22,6 +24,22 @@ class StructuralControllabilityResult:
     driver_nodes: List[Any]
     matched_in_nodes: Set[Any]
     matching_pairs: List[Tuple[Any, Any]]
+    source_components: List[List[Any]] = field(default_factory=list)
+
+    @property
+    def minimum_input_channels(self) -> int:
+        """Minimum independent signal count when one signal may actuate several sites."""
+        return max(1, self.n_nodes - len(self.matching_pairs)) if self.n_nodes else 0
+
+    @property
+    def shared_input_sites(self) -> List[List[Any]]:
+        """One explicit minimum-channel layout on these same physical sites."""
+        channels = [[v] for v in self.driver_nodes if v not in self.matched_in_nodes]
+        extra_sites = [v for v in self.driver_nodes if v in self.matched_in_nodes]
+        if not channels:
+            return [extra_sites] if extra_sites else []
+        channels[0].extend(extra_sites)
+        return channels
 
 
 def _sorted_nodes(G: nx.DiGraph) -> List[Any]:
@@ -29,50 +47,64 @@ def _sorted_nodes(G: nx.DiGraph) -> List[Any]:
     try:
         return sorted(nodes)
     except TypeError:
-        return nodes
+        return sorted(nodes, key=lambda v: (type(v).__module__, type(v).__qualname__, repr(v)))
 
 
 def analyze_structural_controllability(G: nx.DiGraph) -> StructuralControllabilityResult:
     """
-    Compute the exact minimum number of driver nodes N_D and a valid driver node set
-    using the Liu-Slotine-Barabasi (Nature 2011) maximum bipartite matching theorem.
+    Return a minimum dedicated layout (one independent input per listed site).
 
-    For a directed graph G(V, E), build bipartite graph B(V+, V-, E_bip)
-    where each directed edge (u -> v) becomes an undirected bipartite edge (("out", u), ("in", v)).
-    Unmatched nodes in V- correspond to the minimum driver nodes, with N_D = max(1, N - |M*|).
+    Every right-unmatched vertex of a maximum state matching needs a site, and
+    every source strongly connected component (SCC) needs an input path. Among
+    maximum matchings, maximize the number of source SCCs with an unmatched
+    vertex, then add one site per still-uncovered source SCC. This realizes the
+    dedicated structural input selection bound m + beta - alpha, where m is
+    the matching deficiency, beta the number of source SCCs, and alpha the
+    maximum number of those SCCs assignable to unmatched vertices.
+
+    The shared-channel alternative is reported separately by shared_input_sites.
+    Both statements concern generic, independently weighted graph edges.
     """
     nodes = _sorted_nodes(G)
     n = len(nodes)
     if n == 0:
         return StructuralControllabilityResult(0, 0, 0, 0.0, [], set(), [])
 
-    B = nx.Graph()
-    out_nodes = [("out", u) for u in nodes]
-    in_nodes = [("in", v) for v in nodes]
-    B.add_nodes_from(out_nodes, bipartite=0)
-    B.add_nodes_from(in_nodes, bipartite=1)
+    index = {node: i for i, node in enumerate(nodes)}
+    condensation = nx.condensation(G)
+    sources = [
+        sorted(condensation.nodes[c]["members"], key=index.__getitem__)
+        for c, degree in condensation.in_degree() if degree == 0
+    ]
+    sources.sort(key=lambda members: index[members[0]])
 
-    for u, v in G.edges():
-        B.add_edge(("out", u), ("in", v))
+    # Rows are target states. A column is a state predecessor, a single-use
+    # representative of a source SCC, or that row's private slack. Relative to
+    # slack, a state match is worth beta+1 and an SCC match is worth 1.
+    # Thus no gain in SCC coverage can sacrifice one actual state match.
+    n_sources = len(sources)
+    rows = list(range(n))
+    cols = [n + n_sources + i for i in range(n)]
+    weights = [1] * n
+    for source in nodes:
+        for target in G.successors(source):
+            rows.append(index[target])
+            cols.append(index[source])
+            weights.append(n_sources + 2)
+    for i, members in enumerate(sources):
+        rows.extend(index[v] for v in members)
+        cols.extend([n + i] * len(members))
+        weights.extend([2] * len(members))
 
-    matching = bipartite.hopcroft_karp_matching(B, top_nodes=out_nodes)
-
-    matched_in: Set[Any] = set()
-    pairs: List[Tuple[Any, Any]] = []
-    for u in nodes:
-        out_key = ("out", u)
-        if out_key in matching:
-            _, v = matching[out_key]
-            matched_in.add(v)
-            pairs.append((u, v))
-
-    unmatched = [v for v in nodes if v not in matched_in]
-    if len(unmatched) == 0:
-        # Perfect matching (|M*| == N, e.g., cycle cover): N_D = max(1, N - |M*|) = 1
-        driver_nodes = [nodes[0]]
-    else:
-        driver_nodes = unmatched
-
+    assignment = csr_matrix((weights, (rows, cols)), shape=(n, 2 * n + n_sources))
+    target_rows, source_cols = min_weight_full_bipartite_matching(assignment, maximize=True)
+    pairs = [(nodes[col], nodes[row]) for row, col in zip(target_rows, source_cols) if col < n]
+    matched_in = {target for _, target in pairs}
+    sites = set(nodes) - matched_in
+    for members in sources:
+        if sites.isdisjoint(members):
+            sites.add(members[0])
+    driver_nodes = [v for v in nodes if v in sites]
     n_drivers = len(driver_nodes)
     return StructuralControllabilityResult(
         n_nodes=n,
@@ -82,6 +114,7 @@ def analyze_structural_controllability(G: nx.DiGraph) -> StructuralControllabili
         driver_nodes=driver_nodes,
         matched_in_nodes=matched_in,
         matching_pairs=pairs,
+        source_components=sources,
     )
 
 
@@ -89,7 +122,7 @@ def classify_control_edges(G: nx.DiGraph) -> Dict[str, List[Tuple[Any, Any]]]:
     """
     Classify all directed edges of G into the three Liu-Slotine-Barabasi (Nature 2011)
     structural control link categories:
-    - 'critical': removing the edge strictly increases the minimum driver count
+    - 'critical': removing the edge strictly increases the minimum independent signal count
                   N_D = max(1, N - |M*|).
     - 'redundant': the edge never belongs to any maximum bipartite matching
                    (forcing (u+, v-) into a matching strictly reduces |M*|).
@@ -155,52 +188,38 @@ def verify_pbh_controllability(
     seed: int = 42,
     tol: float = 1e-7,
 ) -> Tuple[bool, int]:
-    """
-    Numerically verify the Popov-Belevitch-Hautus (PBH) controllability test:
-        rank([s I_N - A, B]) == N   for all s in C (all eigenvalues of A plus s = 0),
-    using generic random weights strictly on the edges of G (zero artificial self-loops,
-    since independent nodal self-loops alter structural controllability per Cowan et al. 2012)
-    and m = len(driver_nodes) independent control input columns in B.
+    """Check exactly the listed dedicated sites, using one input column per site."""
+    return verify_pbh_input_placement(G, [[node] for node in driver_nodes], seed=seed, tol=tol)
 
-    Per Liu-Slotine-Barabasi (Nature 2011, SI Sec. II.B, Cactus Theorem), if G contains
-    root strongly connected components (SCCs with zero incoming links from outside) that
-    contain no unmatched node (e.g., isolated cycle covers), the first external control
-    signal u_0 also couples to one node in each uncovered root SCC without increasing the
-    number of independent inputs m.
+
+def verify_pbh_input_placement(
+    G: nx.DiGraph,
+    input_sites: Sequence[Sequence[Any]],
+    seed: int = 42,
+    tol: float = 1e-7,
+) -> Tuple[bool, int]:
+    """Check an explicit input support with seeded generic nonzero A and B weights.
+
+    Each group is one independent column of B. Every site in that group
+    receives that signal. No other states are actuated. This is a numerical
+    check of one realization; generic structural analysis is a separate step.
     """
     rng = np.random.default_rng(seed)
     nodes = _sorted_nodes(G)
     n = len(nodes)
     if n == 0:
         return True, 0
-    m = len(driver_nodes)
-    if m == 0:
-        return False, 0
 
     node_to_idx = {u: idx for idx, u in enumerate(nodes)}
-
-    # Strictly preserve G's exact zero/nonzero pattern (A[v, u] != 0 iff (u -> v) in E(G))
     A = np.zeros((n, n), dtype=float)
-    for u, v in G.edges():
-        A[node_to_idx[v], node_to_idx[u]] = rng.uniform(0.5, 2.0)
+    for u in nodes:
+        for v in sorted(G.successors(u), key=node_to_idx.__getitem__):
+            A[node_to_idx[v], node_to_idx[u]] = rng.uniform(0.5, 2.0)
 
-    B = np.zeros((n, m), dtype=float)
-    driver_set = set(driver_nodes)
-    for col, d_node in enumerate(driver_nodes):
-        B[node_to_idx[d_node], col] = rng.uniform(0.8, 1.5)
-
-    # Cactus theorem root-SCC accessibility coupling (only for non-top-linked cycle SCCs):
-    # Connect input column 0 to any root SCC of size >= 2 (or self-looped) that has no driver node,
-    # ensuring accessibility of closed cycles without adding extra control columns.
-    condensation = nx.condensation(G)
-    for scc_id in condensation.nodes():
-        if condensation.in_degree(scc_id) == 0:
-            members = condensation.nodes[scc_id]["members"]
-            if driver_set.isdisjoint(members):
-                has_internal_edge = len(members) >= 2 or any(G.has_edge(w, w) for w in members)
-                if has_internal_edge:
-                    rep = sorted(members)[0] if all(isinstance(x, (int, str)) for x in members) else next(iter(members))
-                    B[node_to_idx[rep], 0] = rng.uniform(0.8, 1.5)
+    B = np.zeros((n, len(input_sites)), dtype=float)
+    for col, group in enumerate(input_sites):
+        for node in group:
+            B[node_to_idx[node], col] = rng.uniform(0.8, 1.5)
 
     eigvals = list(np.linalg.eigvals(A)) + [0.0 + 0.0j]
     min_rank = n

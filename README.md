@@ -1,185 +1,89 @@
-# NetControl-Pinning-Lab: Complex Network Structural Controllability, Submodular Gramian Actuator Selection & Differentiable Graph Neural Pinning Control
+# NetControl-Pinning-Lab
 
-> **From Exact Structural Controllability to Differentiable Nonlinear Network Steering**  
-> Bridging **Liu–Slotine–Barabási Maximum Matching Theory**, **Submodular Controllability Gramian Optimization**, and **Differentiable ODE Graph Neural Pinning Control** on directed complex networks and ozone–pollutant reaction cascades.
+一个可复跑的复杂网络控制实验。给定一张有向图，应该把控制信号接在哪里？在固定时间内，要花多少输入能量才能到达指定目标？当控制器只能看到邻居时，图神经网络能比线性反馈多做什么？下面分别用 32、30、28 节点的合成网络回答这三个问题。仓库同时提供图生成器、数值算法、交互工作台和逐次实验记录。
 
----
+## 驱动节点与独立输入通道
 
-## 1. Overview · 项目背景与核心贡献
+**执行器位置**是实际接收控制的节点。专用接线给每个位置分配一路独立信号，共享接线允许一路信号以各自的增益送到多个位置。这对应输入矩阵 $B$ 的非零行和列两个不同的计数。
 
-在复杂网络科学与控制理论交叉领域（如臭氧–污染物反应级联网络调控、城市供水/基础设施网络韧性控制、振荡器同步），如何**以最少的控制节点（Driver / Pinning Nodes）和最低的控制能量将高维非线性耦合网络驱动至目标安全稳态**，是最核心的科学问题。
+在非空图的一般结构模型中，令 $m=N-|M^*|$ 为最大匹配的缺额。允许分接时，最少独立信号数为 $\max(1,m)$。要求每个位置各接一路时，还要覆盖每个没有外来边的强连通分量。若共有 $\beta$ 个这样的分量，且最大匹配的右侧未匹配节点至多能覆盖其中 $\alpha$ 个，则最少专用位置数为 $m+\beta-\alpha$。实现先最大化匹配大小，再最大化这类分量的覆盖数。[结构算法与 PBH 检验](netcontrol/structural.py) · [专用执行器选址的理论依据](https://doi.org/10.1109/TAC.2015.2437525)
 
-`NetControl-Pinning-Lab` 构建了一套从 **拓扑结构可控性解析** $`\rightarrow`$ **能量最优执行器子模优选** $`\rightarrow`$ **可微图神经网络非线性牵制控制（Pinning Control）** 的完整算法与仿真实验框架：
+**两个互不相连的双向环**最容易看出区别。节点 0、1 构成一环，2、3 构成另一环。在同一组网络边权上，改变接线后得到以下 PBH 最小秩。
 
-1. **精确结构可控性与控制连边分类（[`netcontrol/structural.py`](netcontrol/structural.py)）**：
-   - 基于 **Liu–Slotine–Barabási (Nature 2011)** 二部图最大匹配定理（Hopcroft–Karp 算法），精确求解任意有向网络最少驱动节点数 $`N_D = \max(1, N - \lvert M^{*} \rvert)`$，并在严格保持原图稀疏结构（无虚构自环）下通过 **Popov–Belevitch–Hautus (PBH) 秩判据** 进行全特征值（含 $`s = 0`$）满秩数值核验；
-   - 实现全网有向边的结构控制角色精确划分：**关键边（Critical Links）**、**普通边（Ordinary Links）** 与 **冗余边（Redundant Links）**。
-2. **可控性格拉姆矩阵与 CELF 惰性贪心子模执行器优选（[`netcontrol/gramian_lqr.py`](netcontrol/gramian_lqr.py)）**：
-   - 基于 **Van Loan (IEEE TAC 1978)** 缩放平方分块矩阵指数精确求解有限时域可控性格拉姆矩阵 $`W_c(T) = \int_0^T e^{At}BB^\top e^{A^\top t}\,\mathrm{d}t`$，并支持带连续时间 Hurwitz 谱位移稳定化的无穷时域 Lyapunov 方程 $`A_s W_c + W_c A_s^\top + BB^\top = 0`$ 及 Pontryagin 最小能量开环控制律；
-   - 利用归一化非负体积可控性指标 $`\tilde{F}(\mathcal{S}) = \log\det\left(I_N + \epsilon^{-1} \sum_{i \in \mathcal{S}} W_i(T)\right) \ge 0`$ 的**单调子模性（Monotone Submodularity）**，结合 **CELF 惰性贪心（Lazy Greedy）** 优先队列加速实现具备严格 $`(1 - 1/e)`$ 近似比保证的执行器优选，控制能量较经典中心性启发式（Out-Degree / PageRank / Betweenness）降低 **$66\% \sim 75\%$**。
-3. **可微 ODE 图神经网络非线性牵制控制器（[`netcontrol/neural_pinning.py`](netcontrol/neural_pinning.py)）**：
-   - 针对带 Michaelis–Menten 饱和与自催化交叉激活的非线性反应级联动力学，设计拓扑感知的 **`GraphNeuralPinningController`**；
-   - 通过多初值集成可微四阶 Runge–Kutta（RK4）轨迹展开与精确梯形求积进行端到端反向传播训练，在同权重（$`Q = 3.0 I_N, R = 0.08 I_K`$）公平基准及未见随机初值泛化测试中全面超越传统线性牵制控制与连续代数 Riccati 方程（CARE）LQR 控制器。
+| 接线 | 接触节点数 | 独立信号数 | PBH 最小秩 |
+| --- | ---: | ---: | ---: |
+| 只有节点 0 接收输入 | 1 | 1 | 3/4 |
+| 节点 0 和 2 各接一路 | 2 | 2 | 4/4 |
+| 同一路信号分接节点 0 和 2 | 2 | 1 | 4/4 |
 
----
+32 节点、65 条边的合成级联图中，最大匹配大小为 21。这里两个计数恰好都是 **11**，给选出的 11 个位置各接一路，PBH 最小秩为 **32/32**。边按删除后独立信号需求是否增加、以及能否进入最大匹配，分为 5 条关键边、47 条普通边和 13 条冗余边。PBH 使用图的原始稀疏结构和固定种子抽取的一组非零权重。后两项轨迹实验另行构造带衰减的数值系统。[接线、最大匹配与逐边分类](results/benchmark_summary.json)
 
-## 2. Mathematical Formulation · 核心数学建模
+![一张合成级联图上的专用位置与边分类，以及两独立环的三种接线和 PBH 秩](assets/network_control_topology.png)
 
-### 2.1 结构可控性与二部图最大匹配定理
-考虑有向复杂网络上的线性时不变动力学系统：
+度分布实验对三类 120 节点网络分别采样，每个目标平均出度各取五张图。图中纵轴为允许分接时的最少独立信号数占比，阴影为五张图之间的一个标准差。以目标平均出度 4 为例，ER 随机图观测均值为 **3.00%**，虚线 $\exp(-4/2)$ 为 **13.53%**。这组有限样本能展示不同生成器的差异，对该指数公式的定量拟合较差。[各图种子、边数和两种输入计数](results/benchmark_summary.json)
 
-```math
-\frac{\mathrm{d}\mathbf{x}(t)}{\mathrm{d}t} = A\mathbf{x}(t) + B\mathbf{u}(t), \qquad \mathbf{x}(t) \in \mathbb{R}^N, \quad \mathbf{u}(t) \in \mathbb{R}^M
-```
+![不同目标平均出度下的独立通道比例与指数参考曲线](assets/driver_scaling_law.png)
 
-根据 Kalman 满秩判据与 **Liu–Slotine–Barabási 结构可控性定理**，将有向图 $`G(\mathcal{V}, \mathcal{E})`$ 映射为二部图 $`\mathcal{B}(\mathcal{V}^+, \mathcal{V}^-, \mathcal{E}_{\text{bip}})`$，其中每条有向边 $`(v_j \to v_i) \in \mathcal{E}`$ 对应二部边 $`(v_j^+, v_i^-)`$。若最大二部匹配为 $`M^{*}`$，则使系统结构可控所需的最少驱动节点数为：
+## 执行器选点、输入能量与终点误差
 
-```math
-N_D = \max\left(1, \; N - \lvert M^{*} \rvert\right), \qquad n_D = \frac{N_D}{N}
-```
+在固定的 30 节点线性系统上，以同一初态在 $T=2$ 时到达零为目标。比较 6 种执行器预算和 5 种选点策略。贪心选点最大化归一化格拉姆矩阵体积指标 $\log\det(I+W/\epsilon)$，$\epsilon=10^{-5}$。基数约束下的 $1-1/e$ 近似保证适用于该体积指标。输入能量需要结合初态、目标和允许误差另行计算。[格拉姆矩阵与轨迹实现](netcontrol/gramian_lqr.py) · [子模体积指标](https://doi.org/10.1109/TCNS.2015.2453711)
 
-且所有在 $`\mathcal{V}^-`$ 中未被匹配的节点集合 $`\mathcal{D} = \mathcal{V}^- \setminus V^-(M^{*})`$ 即构成精确的最小驱动节点集（对孤立根强连通环按 Cactus 定理耦合）。对于每个特征值 $`s \in \lambda(A) \cup \{0\}`$，严格保持原图非零结构的通用权矩阵 $`A`$ 满足 **PBH 秩判据**：
+给定接线后，令 $E=\int_0^T\|u(t)\|_2^2\,dt$ 为施加的输入能量，$r=\|x(T)-x_f\|_2$ 为终点误差。下表固定 $K=10$，各方法都求使 $J_\lambda=E+r^2/\lambda$ 最小的连续输入，$\lambda=10^{-4}$。最后一列单独求解终点误差为零的问题。所有输入都没有幅值约束。
 
-```math
-\mathrm{rank}\begin{bmatrix} sI_N - A & B_{\mathcal{D}} \end{bmatrix} = N
-```
+| 选点策略 | 可达维数 / 30 | 输入能量 $E$ | 终点误差 $r$ | 含惩罚总代价 | 精确到零的最小能量 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 体积贪心 | 30 | 389.94 | 0.1846 | 730.76 | 1724.63 |
+| 加权出度 | 24 | 127.16 | 0.4524 | 2173.55 | 该初态不可达零 |
+| 反向图 PageRank | 24 | 339.38 | 0.4549 | 2409.00 | 该初态不可达零 |
+| 介数 | 23 | 112.67 | 0.5357 | 2982.53 | 该初态不可达零 |
+| 随机选点（固定种子） | 26 | 282.17 | 0.4617 | 2413.46 | 该初态不可达零 |
 
-### 2.2 可控性格拉姆矩阵与归一化子模执行器优选
-给定受控节点集合 $`\mathcal{S} \subseteq \mathcal{V}`$（$`\lvert \mathcal{S} \rvert = K`$）及输入矩阵 $`B_{\mathcal{S}}`$，有限时域 $`[0, T]`$ 内的可控性格拉姆矩阵（Controllability Gramian）定义为：
+**旧表的 730.76 包含 389.94 输入能量和 340.82 终点惩罚。** 若给不同方法相同的终点误差上限，再比较各自所需最小能量，排名会随精度要求变化。
 
-```math
-W_c(\mathcal{S}, T) = \int_0^T e^{At} B_{\mathcal{S}} B_{\mathcal{S}}^\top e^{A^\top t}\,\mathrm{d}t = \sum_{i \in \mathcal{S}} \underbrace{\int_0^T e^{At} \mathbf{e}_i \mathbf{e}_i^\top e^{A^\top t}\,\mathrm{d}t}_{W_i(T)}
-```
+| 允许的最大终点误差 | 体积贪心 | 加权出度 |
+| --- | ---: | ---: |
+| 0.45 | **38.06** | 151.15 |
+| 0.50 | 29.74 | **25.88** |
 
-对于无穷时域分析，当且仅当矩阵满足 Hurwitz 渐近稳定条件（谱横坐标 $`\alpha(A) = \max_k \mathrm{Re}\,\lambda_k(A) \lt 0`$；若非 Hurwitz 则施加最小连续谱位移 $`A_s = A - \max(0, \alpha(A) + \delta) I_N`$）时，无穷时域格拉姆矩阵唯一正定/半正定地满足连续 Lyapunov 方程 $`A_s W_c + W_c A_s^\top + B_{\mathcal{S}} B_{\mathcal{S}}^\top = 0`$。
+在这张图和这组预算中，贪心的优势是可达维数更高、精确到零可行。是否省能取决于目标精度。$K=10$ 时，CELF 惰性贪心和逐一计算边际增益的贪心选出相同序列，分别评估 72、255 次。所有 30 组运行均保存了节点列表、终态、秩判定容差与等误差对照。[系统矩阵、初态与逐次结果](results/benchmark_summary.json)
 
-将网络从初始污染态 $`\mathbf{x}_0`$ 在时间 $`T`$ 内精确驱动至目标稳态 $`\mathbf{x}_f = \mathbf{0}`$ 的 **Pontryagin 最小控制能量** 为：
+![各预算下的体积指标、输入能量及终点误差；右下比较相同误差约束下的最小输入能量](assets/actuator_submodular_benchmark.png)
 
-```math
-\mathcal{E}^{*}(\mathbf{x}_0 \to \mathbf{0}, T) = \mathbf{x}_0^\top e^{A^\top T} W_c(\mathcal{S}, T)^{-1} e^{AT} \mathbf{x}_0, \qquad \mathbf{u}^{*}(t) = -B_{\mathcal{S}}^\top e^{A^\top (T-t)} W_c(\mathcal{S}, T)^{-1} e^{AT}\mathbf{x}_0
-```
+调用 `minimum_energy_trajectory` 时，`input_energy` 和兼容键 `energy` 均返回输入积分。读取旧版含惩罚数值请用 `regularized_objective`。`exact_target_energy` 在目标超出数值可达子空间时返回 `None`。设置 `reg=0` 表示要求精确终点，指定不可达目标会报错。[解析算例及数值积分回归测试](tests/test_energy_accounting.py)
 
-由于 $`W_c(\mathcal{S}, T)`$ 对集合 $`\mathcal{S}`$ 具有模可加性（Modularity），定义原始体积可控性指标 $`F(\mathcal{S}) = \log\det\left(\sum_{i \in \mathcal{S}} W_i(T) + \epsilon I_N\right)`$ 及其减去空集基线 $`F(\emptyset) = N\log\epsilon`$ 后的**归一化非负对数行列式目标函数**：
+## 非线性牵制控制的同图对照
 
-```math
-\max_{\mathcal{S} \subseteq \mathcal{V}, \; \lvert \mathcal{S} \rvert \le K} \tilde{F}(\mathcal{S}) = F(\mathcal{S}) - F(\emptyset) = \log\det\left(I_N + \epsilon^{-1} \sum_{i \in \mathcal{S}} W_i(T)\right) \ge 0, \qquad \tilde{F}(\emptyset) = 0
-```
+同一张 28 节点合成图上，使用 8 个固定执行器、8 个训练初态，并给每个可学习控制器 55 轮训练。原 10 个和追加的 80 个留出初态来自同一个均匀分布，种子分别为 9090、16219。训练完成后冻结权重。下表各控制器使用相同的执行器和输入幅值上限 6。局部线性反馈和单跳 GNN 都可读取本节点及相邻节点，全状态线性反馈可以读取全部 28 个状态。自节点神经对照保留静态节点特征，用相同参数初始化，移除邻居消息后单独训练。[训练、观测掩码与对照定义](scripts/neural_pinning_comparison.py)
 
-根据正定锥上 $`\log\det(\cdot)`$ 的算子凹性与 Nemhauser–Wolsey–Fisher 定理，$`\tilde{F}(\mathcal{S})`$ 是归一化非负单调子模函数，CELF 惰性贪心边际增益最大化算法严格保证获得 $`\tilde{F}(\mathcal{S}_{\text{greedy}}) \ge (1 - 1/e) \tilde{F}(\mathcal{S}^{*})`$。
+| 控制器 | 原 10 个初态平均 $J$ | 新 80 个初态平均 $J$ | 新 80 个初态平均施加能量 |
+| --- | ---: | ---: | ---: |
+| 稳态 CARE-LQR | 742.71 | 778.14 | 133.28 |
+| 带终端权重的有限时域 LQR | 704.30 | 737.78 | 149.13 |
+| 学习得到的局部线性反馈 | 655.95 | 689.29 | 198.86 |
+| 学习得到的全状态线性反馈 | **630.86** | **663.42** | 210.69 |
+| 仅看本节点的神经控制器 | 1157.30 | 1191.47 | 210.50 |
+| 单跳 GNN | 636.08 | 668.49 | 234.81 |
 
-### 2.3 可微图神经网络非线性牵制控制（Neural Pinning Control）
-在臭氧–污染物非线性反应扩散级联网络中，节点状态演化遵循：
+逐个初态比较，GNN 在 **90/90** 个留出初态上取得比局部线性反馈更低的总代价；全状态线性反馈也在 **90/90** 个初态上优于 GNN。两种 Riccati 基线由线性模型设计，运行时与其他控制器一样在带平滑限幅的非线性系统上评分。观测与评价范围限于这张图、这次训练和该初态分布。仿真允许有符号状态，原 10 个 GNN 测试轨迹均出现负坐标，最低约为 −2.75。将这些数值解释为实际污染物浓度或工程能耗需要额外的物理模型与校准。[逐初态结果与协议](results/neural_pinning_holdouts.json)
 
-```math
-\frac{\mathrm{d}\mathbf{x}(t)}{\mathrm{d}t} = A\mathbf{x}(t) + \mathbf{f}_{\text{nl}}\left(\mathbf{x}(t)\right) + B_{\mathcal{P}}\mathbf{u}_{\mathcal{P}}(t), \qquad f_{\text{nl}, i}(x_i) = \alpha \frac{x_i^2}{1 + x_i^2} + \beta \sin(\omega x_i)\tanh(x_i)
-```
+![两组留出初态上六种控制器的平均总代价与实际施加的输入能量](assets/neural_pinning_trajectories.png)
 
-其中 $`\mathcal{P} \subseteq \mathcal{V}`$（$`\lvert \mathcal{P} \rvert = K`$）为受控牵制节点集。我们构建图消息传递控制器 $`\mathbf{u}_{\mathcal{P}}(t) = \pi_\theta\left(\mathbf{x}(t), \hat{A}, \mathbf{S}_{\text{struct}}\right)`$，融合节点出入强度中心性、驱动节点指示符与一阶邻居状态特征，并通过可微 RK4 积分器最小化 Bolza 综合轨迹代价（$`Q = q_x I_N, R = r_u I_K, Q_f = q_f I_N`$）：
+闭环评分沿用原来的采样定义。以 0.05 为步长进行四阶 Runge–Kutta 仿真，总时长为 4。对状态范数平方、采样命令范数平方分别做梯形求积，再按权重 3、0.08 加权，加上终端状态范数平方的 12 倍，得到 $J$。实际施加的输入在步内保持常值，因此另存 `applied_input_energy`，按每个区间的时长乘实际命令范数平方累加。`control_energy` 保留计入 $J$ 的采样值。图的右栏和上表最后一列都使用实际施加量。[评分实现](netcontrol/neural_pinning.py)
 
-```math
-\min_\theta \; J(\theta) = \underbrace{\int_0^T \left(\mathbf{x}(t)^\top Q\mathbf{x}(t) + \mathbf{u}_{\mathcal{P}}(t)^\top R\mathbf{u}_{\mathcal{P}}(t)\right) \mathrm{d}t}_{J_{\text{run}}} + \mathbf{x}(T)^\top Q_f\mathbf{x}(T)
-```
+## 本地复现
 
----
-
-## 3. Experimental Benchmarks & Visual Gallery · 实验结果与图表展示
-
-运行 `python scripts/run_benchmarks.py` 可一键复现以下四组核心实验（完整统计结果存放在 [`results/benchmark_summary.json`](results/benchmark_summary.json) 与 [`results/benchmark_table.csv`](results/benchmark_table.csv)）：
-
-### 3.1 复杂网络度异质性与驱动节点标度律（Scaling Law）
-![Driver Scaling Law](assets/driver_scaling_law.png)
-
-- 在相同平均有向度 $`\langle k \rangle`$ 下，度分布高度异质的有向无标度网络（Scale-Free, $`\gamma=2.2`$）所需的驱动节点比例 $`n_D`$ 显著高于随机有向网络（Erdős–Rényi），验证了 **度异质性增加结构可控难度** 的经典结论；
-- 随机有向图的数值曲线与理论渐近解 $`n_D \approx e^{-\langle k \rangle / 2}`$ 高度吻合。
-
-### 3.2 臭氧–污染物反应级联网络结构可控性图谱与连边分类
-![Network Control Topology](assets/network_control_topology.png)
-
-- 在 $`N=32, E=65`$ 的三级反应级联网络（前体物 $`\to`$ 自由基中间体 $`\to`$ 副产物）中，最大二部匹配精确识别出 $`N_D = 11`$ 个驱动节点（$`n_D = 34.38\%`$），并通过无虚构自环的 **PBH 秩判据验证满秩（Rank = $`32/32`$）**；
-- 全网 $`65`$ 条有向反应路径被精确划分为 **$`5`$ 条关键边（Critical）**、**$`47`$ 条普通边（Ordinary）** 与 **$`13`$ 条冗余边（Redundant）**。
-
-### 3.3 子模格拉姆执行器优选 vs. 网络中心性基线
-![Submodular Gramian Benchmark](assets/actuator_submodular_benchmark.png)
-
-在执行器预算 $`K = 10`$ 时，五种选点策略的体积可控性与最小驱动能量对比：
-
-| 选点策略 (Actuator Selection Strategy) | $`\log\det(W_c + \epsilon I)`$ (越大越好 $`\uparrow`$) | 最小控制能量 $`\mathcal{E}^{*}(x_0 \to 0)`$ (越小越好 $`\downarrow`$) | 相对能量倍数 |
-| :--- | :---: | :---: | :---: |
-| **Submodular Greedy (Ours)** | **`-157.820`** | **`730.764`** | **`1.00x` (Baseline)** |
-| Out-Degree Hubs (出度中心性) | `-178.652` | `2173.551` | `2.97x` |
-| PageRank Centrality | `-181.640` | `2409.000` | `3.30x` |
-| Random Placement | `-187.738` | `2413.457` | `3.30x` |
-| Betweenness Centrality (介数中心性) | `-189.528` | `2982.529` | `4.08x` |
-
-### 3.4 非线性反应级联抑制：可微图神经牵制控制 vs. 公平同权重 CARE-LQR
-![Neural Pinning Trajectories](assets/neural_pinning_trajectories.png)
-
-在 $`N=28`$ 节点非线性级联网络（仅牵制 $`K=8`$ 个节点，占 $`28.6\%`$，统一权重 $`q_x = 3.0, r_u = 0.08, q_f = 12.0`$）上的闭环控制性能对比（见 [`results/benchmark_table.csv`](results/benchmark_table.csv)）：
-
-| 闭环牵制控制策略 (Control Law) | 状态误差积分 $`\mathrm{ISE}_x`$ ($`\downarrow`$) | 控制能量 $`\mathcal{E}_u`$ | 运行代价 $`J_{\text{run}}`$ ($`\downarrow`$) | Bolza 总代价 $`J`$ ($`\downarrow`$) | 终端状态范数 $`\|\mathbf{x}(T)\|_2`$ ($`\downarrow`$) |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| Uncontrolled Cascade (无控制发散) | `495.3876` | `0.0000` | `1486.1629` | `2927.5977` | `10.9599` |
-| Random Pinning + Linear Feedback | `323.6251` | `61.8788` | `975.8257` | `1822.5342` | `8.3999` |
-| Submodular Pinning + Linear Feedback | `253.8185` | `35.3560` | `764.2840` | `1247.0006` | `6.3424` |
-| Submodular Pinning + Algebraic Riccati LQR | `185.1256` | `127.2090` | `565.5534` | `794.0016` | `4.3632` |
-| **Submodular Pinning + Graph Neural Controller (Ours)** | **`178.7584`** | `217.4557` | **`553.6717`** | **`684.3321`** | **`3.2998`** |
-
-- **未见随机初值零样本泛化（Out-of-Sample Generalization）**：在 10 组独立采样的未见初始污染态上，`GraphNeuralPinningController` 平均状态误差积分 $`\mathrm{ISE}_x = 165.7384`$（优于同权重 CARE-LQR 的 `172.1713`），平均 Bolza 总代价 $`J = 634.6163`$（较 CARE-LQR 的 `742.7124` 降低 **`14.55%`**）。
-
----
-
-## 4. Quick Start · 快速运行指南
-
-### 4.1 安装依赖
 ```bash
 python -m pip install -r requirements.txt
-```
-
-### 4.2 运行单元测试（验证匹配定理、无虚构自环 PBH 满秩、Van Loan/Lyapunov Gramian、CELF 子模等价与神经牵制泛化）
-```bash
-pytest -v
-```
-
-### 4.3 一键复现全部论文级图表与 JSON/CSV 基准结果
-```bash
+python -m pytest -q
 python scripts/run_benchmarks.py
-```
-
-### 4.4 启动 Streamlit 交互式复杂网络控制仿真工作台
-```bash
+python -m scripts.neural_pinning_comparison --replay
 streamlit run app.py
 ```
 
----
+完整基准在 CPU 上运行，生成四张图和对应数据。冻结权重重播会校验归档指纹、逐条初态和每项得分。本次运行使用 Python 3.13.9、NumPy 2.2.6、SciPy 1.16.3、NetworkX 3.5、PyTorch 2.7.1。
 
-## 5. Repository Structure · 项目结构
+- 四组实验的配置、接线、线性系统、收敛指标与汇总结果见 [benchmark_summary.json](results/benchmark_summary.json)。
+- 原始训练参考初态上的九种控制器得分见 [benchmark_table.csv](results/benchmark_table.csv)。两组留出初态及九种策略的逐例得分见 [neural_pinning_holdouts.json](results/neural_pinning_holdouts.json)。
+- 四种训练策略的参数以普通 NumPy 数组保存，重播使用 [neural_feedback_weights.npz](results/neural_feedback_weights.npz)。
 
-```text
-NetControl-Pinning-Lab/
-├── netcontrol/
-│   ├── __init__.py                 # 公共 API 导出
-│   ├── topologies.py               # 有向 ER / 无标度 / 小世界 / 臭氧反应级联网络生成器
-│   ├── structural.py               # 二部图最大匹配、最少驱动节点 N_D、连边分类与无自环 PBH 满秩校验
-│   ├── gramian_lqr.py              # Van Loan / Lyapunov 格拉姆矩阵、最小能量轨迹、CELF 惰性子模选点与 CARE-LQR
-│   └── neural_pinning.py           # 多初值可微 RK4 图神经网络牵制控制器 (GraphNeuralPinningController)
-├── scripts/
-│   └── run_benchmarks.py           # 自动化复现实验与 300-DPI 论文级图表生成脚本
-├── tests/
-│   └── test_netcontrol.py          # Pytest 数学性质与控制性能对抗性单元测试
-├── assets/                         # 生成的四张 300-DPI 高分辨率实验分析图
-├── results/                        # 实验结果汇总 (benchmark_summary.json, benchmark_table.csv)
-├── app.py                          # Streamlit 交互式可视化仿真工作台
-├── pyproject.toml                  # 标准 Python 包构建配置
-├── requirements.txt                # 环境依赖清单
-└── README.md                       # 项目文档
-```
-
----
-
-## 6. References · 参考文献
-
-1. Liu, Y.-Y., Slotine, J.-J., & Barabási, A.-L. (2011). Controllability of complex networks. *Nature*, 473(7346), 167–173.
-2. Cowan, N. J., Chastain, E. J., Vilhena, D. A., Frensdorff, S. J., & Motter, A. E. (2012). Nodal dynamics, not degree distributions, lead to driver nodes in control of complex networks. *Nature*, 489(7415), E3–E4.
-3. Summers, T. H., Cortesi, F. L., & Lygeros, J. (2016). On submodularity and controllability in complex dynamical networks. *IEEE Transactions on Control of Network Systems*, 3(1), 91–101.
-4. Van Loan, C. F. (1978). Computing integrals involving the matrix exponential. *IEEE Transactions on Automatic Control*, 23(3), 395–404.
-5. Wang, X. F., & Chen, G. (2002). Pinning control of scale-free dynamical networks. *Physica A: Statistical Mechanics and its Applications*, 310(3-4), 521–531.
+结构可控性背景见 [Liu、Slotine 与 Barabási](https://doi.org/10.1038/nature10011)。有限时域格拉姆矩阵的分块指数计算见 [Van Loan](https://doi.org/10.1109/TAC.1978.1101743)。

@@ -17,6 +17,7 @@ from netcontrol import (
     build_continuous_system_matrix,
     classify_control_edges,
     erdos_renyi_directed,
+    minimum_energy_trajectory,
     reaction_cascade_network,
     scale_free_directed,
     select_actuators_baseline,
@@ -37,15 +38,15 @@ st.set_page_config(
 
 st.title("NetControl-Pinning-Lab: 复杂网络结构可控性与神经牵制控制工作台")
 st.markdown(
-    "结合 **Liu-Slotine-Barabási 结构可控性精确匹配定理**、**可控性格拉姆矩阵（Controllability Gramian）子模贪心执行器优选** "
-    "与 **可微图神经网络牵制控制（Differentiable Graph Neural Pinning Control）** 的交互式实验平台。"
+    "在合成有向网络上比较执行器接线、格拉姆矩阵选点和闭环反馈。"
+    "结构分析使用网络的稀疏连接模式，轨迹仿真另使用带衰减的动力学矩阵。"
 )
 
 with st.sidebar:
     st.header("1. 网络拓扑参数")
     topo_type = st.selectbox(
         "选择复杂网络模型",
-        ["Reaction Cascade (臭氧-污染物反应级联)", "Scale-Free (有向无标度网络)", "Erdős–Rényi (随机有向图)", "Small-World (Watts-Strogatz)"],
+        ["Reaction Cascade (合成反应级联)", "Scale-Free (有向无标度网络)", "Erdős–Rényi (随机有向图)", "Small-World (Watts-Strogatz)"],
     )
     n_nodes = st.slider("节点规模 N", min_value=12, max_value=45, value=24, step=2)
     mean_deg = st.slider("平均有向度 / 分支因子 <k>", min_value=1.2, max_value=4.5, value=2.3, step=0.1)
@@ -72,12 +73,16 @@ A = build_continuous_system_matrix(G, damping=0.55, coupling=0.36)
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("节点总数 N / 有向边数 E", f"{sc_res.n_nodes} / {sc_res.n_edges}")
-col2.metric("最少驱动节点数 N_D", f"{sc_res.n_drivers} ({sc_res.driver_fraction:.1%})")
-col3.metric("PBH 满秩验证 (Kalman Rank)", f"{pbh_rank} / {sc_res.n_nodes}" + (" ✓" if pbh_ok else ""))
-col4.metric(
-    "关键边 / 普通边 / 冗余边",
-    f"{len(edge_classes['critical'])} / {len(edge_classes['ordinary'])} / {len(edge_classes['redundant'])}",
+col2.metric("专用执行器位置（每处一路）", sc_res.n_drivers)
+col3.metric("独立输入通道（允许分接）", sc_res.minimum_input_channels)
+col4.metric("专用接线的 PBH 最小秩", f"{pbh_rank} / {sc_res.n_nodes}" + (" ✓" if pbh_ok else ""))
+st.caption(
+    "PBH 使用当前种子的边权样本，按指定位置接线。下方的牵制预算 K 是单独的仿真实验设置。"
 )
+with st.expander("查看执行器位置与共享信号接线"):
+    st.write("专用执行器节点", sc_res.driver_nodes)
+    for channel, sites in enumerate(sc_res.shared_input_sites, start=1):
+        st.text(f"共享方案 · 通道 {channel} 接到节点 {', '.join(map(str, sites))}")
 
 tab1, tab2 = st.tabs(["非线性牵制控制仿真 (Neural Pinning vs LQR)", "结构可控性图谱与子模执行器优选"])
 
@@ -122,26 +127,50 @@ with tab1:
     axes[1].grid(True, linestyle=":", alpha=0.6)
     st.pyplot(fig)
 
-    df_comp = pd.DataFrame([
-        {"控制策略": "Uncontrolled (无控制)", "状态误差积分 ISE": sim_unc["ise_state"], "控制能量 E_u": sim_unc["control_energy"], "综合代价 J": sim_unc["total_j"], "终端范数 ||x(T)||": sim_unc["terminal_norm"], "调节时间 T_s (s)": sim_unc["settling_time"]},
-        {"控制策略": "Random + Linear Pinning", "状态误差积分 ISE": sim_rand["ise_state"], "控制能量 E_u": sim_rand["control_energy"], "综合代价 J": sim_rand["total_j"], "终端范数 ||x(T)||": sim_rand["terminal_norm"], "调节时间 T_s (s)": sim_rand["settling_time"]},
-        {"控制策略": "Submodular + CARE LQR", "状态误差积分 ISE": sim_lqr["ise_state"], "控制能量 E_u": sim_lqr["control_energy"], "综合代价 J": sim_lqr["total_j"], "终端范数 ||x(T)||": sim_lqr["terminal_norm"], "调节时间 T_s (s)": sim_lqr["settling_time"]},
-        {"控制策略": "Submodular + Graph Neural Pinning (Ours)", "状态误差积分 ISE": sim_gnn["ise_state"], "控制能量 E_u": sim_gnn["control_energy"], "综合代价 J": sim_gnn["total_j"], "终端范数 ||x(T)||": sim_gnn["terminal_norm"], "调节时间 T_s (s)": sim_gnn["settling_time"]},
-    ])
-    st.dataframe(df_comp.style.format({"状态误差积分 ISE": "{:.3f}", "控制能量 E_u": "{:.3f}", "综合代价 J": "{:.3f}", "终端范数 ||x(T)||": "{:.3f}", "调节时间 T_s (s)": "{:.2f}"}), use_container_width=True)
+    records = []
+    for name, sim in [
+        ("无控制", sim_unc),
+        ("随机选点 + 比例反馈", sim_rand),
+        ("格拉姆选点 + CARE LQR", sim_lqr),
+        ("格拉姆选点 + 图神经控制器", sim_gnn),
+    ]:
+        records.append({
+            "控制策略": name,
+            "状态误差积分": sim["ise_state"],
+            "实际施加的输入能量": sim["applied_input_energy"],
+            "计入 J 的采样能量": sim["control_energy"],
+            "总代价 J": sim["total_j"],
+            "终端状态范数": sim["terminal_norm"],
+            "调节时间 (s)": sim["settling_time"],
+        })
+    st.caption("仿真在每个时间步内保持控制输入。实际能量按保持时间累加。J 沿用原实验评分，按梯形求积累加状态误差与采样控制量，再加终端惩罚。三项权重分别是 3、0.08、12。调节时间留空表示观测期内未达到阈值。")
+    table = pd.DataFrame.from_records(records).set_index("控制策略")
+    st.dataframe(table.style.format("{:.3f}", na_rep="—"), use_container_width=True)
 
 with tab2:
     fig2, ax2 = plt.subplots(figsize=(8.5, 4.8))
     pos = nx.spring_layout(G, seed=int(seed))
     driver_set = set(sc_res.driver_nodes)
-    matched = [u for u in G.nodes() if u not in driver_set]
+    other_nodes = [u for u in G.nodes() if u not in driver_set]
     nx.draw_networkx_edges(G, pos, edgelist=edge_classes["ordinary"], ax=ax2, edge_color="#377eb8", alpha=0.5, arrows=True)
     nx.draw_networkx_edges(G, pos, edgelist=edge_classes["critical"], ax=ax2, edge_color="#e41a1c", width=2.0, arrows=True)
     nx.draw_networkx_edges(G, pos, edgelist=edge_classes["redundant"], ax=ax2, edge_color="#bdbdbd", style="dashed", arrows=True)
-    nx.draw_networkx_nodes(G, pos, nodelist=matched, ax=ax2, node_color="#4daf4a", node_size=260, label="Matched Nodes")
-    nx.draw_networkx_nodes(G, pos, nodelist=sc_res.driver_nodes, ax=ax2, node_color="#ff7f00", node_shape="^", node_size=340, label="Minimum Driver Nodes N_D")
+    nx.draw_networkx_nodes(G, pos, nodelist=other_nodes, ax=ax2, node_color="#4daf4a", node_size=260, label="Other nodes")
+    nx.draw_networkx_nodes(G, pos, nodelist=sc_res.driver_nodes, ax=ax2, node_color="#ff7f00", node_shape="^", node_size=340, label="Dedicated actuator sites")
     nx.draw_networkx_labels(G, pos, ax=ax2, font_size=8, font_color="#111111")
-    ax2.set_title(f"Structural Controllability Map (Driver Nodes: {sc_res.driver_nodes}, Submodular Pinned: {pinned_sub})")
+    ax2.set_title("Dedicated actuator sites on the structural network")
     ax2.legend()
     ax2.axis("off")
     st.pyplot(fig2)
+    st.caption(f"关键边 / 普通边 / 冗余边（按匹配定义）：{len(edge_classes['critical'])} / {len(edge_classes['ordinary'])} / {len(edge_classes['redundant'])}。本次闭环仿真的选点为 {pinned_sub}。")
+
+    st.subheader("线性系统的输入能量与终端误差")
+    trajectory = minimum_energy_trajectory(A, B_pin, x0, np.zeros_like(x0), horizon=2.5, reg=1e-4)
+    st.caption("用上面选出的 K 个位置，在 2.5 个时间单位内向零目标施加无幅值限制的开环输入。正则目标 = 输入能量 + 终端误差平方 / 0.0001。")
+    energy_col, error_col, objective_col = st.columns(3)
+    energy_col.metric("实际输入能量", f"{trajectory['input_energy']:.3f}")
+    error_col.metric("终端误差范数", f"{trajectory['terminal_error']:.4g}")
+    objective_col.metric("含终端惩罚的正则目标", f"{trajectory['regularized_objective']:.3f}")
+    exact_energy = trajectory["exact_target_energy"]
+    target_note = "在数值容差下该目标不可达" if exact_energy is None else f"精确达零所需最小能量 {exact_energy:.4g}"
+    st.caption(f"可达维数 {trajectory['reachability_rank']}/{n_nodes}，{target_note}。")

@@ -72,7 +72,8 @@ def small_world_directed(n: int, k_out: int = 3, p_rewire: float = 0.2, seed: in
 
 def reaction_cascade_network(n: int = 40, branch_factor: float = 2.6, seed: int = 42) -> nx.DiGraph:
     """
-    Generate a hierarchical ozone-pollutant reaction & transport cascade network:
+    Generate a synthetic three-tier directed graph with random edges and weights.
+    Tier names describe the construction; weights have no chemical calibration.
     - Primary precursors (top tier, ~25%)
     - Reactive intermediates & radical chain carriers (middle tier, ~50%)
     - Terminal transformation products & recycling feedback loops (bottom tier, ~25%)

@@ -21,6 +21,7 @@ from netcontrol import (
     stabilize_hurwitz_matrix,
     train_neural_pinning_controller,
     verify_pbh_controllability,
+    verify_pbh_input_placement,
 )
 from netcontrol.gramian_lqr import build_input_matrix
 
@@ -52,9 +53,37 @@ def test_directed_path_star_cycle_and_string_labels_controllability():
     # 3. Disjoint cycles + string node IDs with underscores
     G_str = nx.DiGraph([("chem_O3", "chem_NO"), ("chem_NO", "chem_O3"), ("rad_OH", "rad_HO2"), ("rad_HO2", "rad_OH")])
     res_str = analyze_structural_controllability(G_str)
-    assert res_str.n_drivers == 1
+    assert res_str.n_drivers == 2
+    assert res_str.minimum_input_channels == 1
+    assert res_str.shared_input_sites == [res_str.driver_nodes]
+    ok_one, rank_one = verify_pbh_controllability(G_str, [res_str.driver_nodes[0]], seed=3)
+    assert not ok_one and rank_one == 3
     ok_str, rk_str = verify_pbh_controllability(G_str, res_str.driver_nodes, seed=3)
     assert ok_str and rk_str == 4
+    assert verify_pbh_input_placement(G_str, res_str.shared_input_sites, seed=3) == (True, 4)
+
+
+def test_minimum_dedicated_layout_resolves_matching_ties_and_handles_mixed_labels():
+    # The cycle-cover matching leaves the downstream node unmatched and would
+    # need one extra source site. The other maximum matching leaves 0 unmatched.
+    edges = [(0, "partner"), ("partner", 0), ("partner", ("sink", 1))]
+    for order in (edges, edges[::-1]):
+        graph = nx.DiGraph(order)
+        layout = analyze_structural_controllability(graph)
+        assert layout.driver_nodes == [0]
+        assert layout.source_components == [[0, "partner"]]
+        assert len(layout.matching_pairs) == 2
+        assert verify_pbh_controllability(graph, layout.driver_nodes) == (True, 3)
+
+
+def test_structural_cascade_dedicated_layout_and_edge_counts():
+    graph = reaction_cascade_network(n=32, branch_factor=2.2, seed=42)
+    layout = analyze_structural_controllability(graph)
+    assert (graph.number_of_edges(), len(layout.matching_pairs)) == (65, 21)
+    assert layout.n_drivers == layout.minimum_input_channels == 11
+    assert verify_pbh_controllability(graph, layout.driver_nodes) == (True, 32)
+    counts = {kind: len(edges) for kind, edges in classify_control_edges(graph).items()}
+    assert counts == {"critical": 5, "ordinary": 47, "redundant": 13}
 
 
 def test_edge_classification_critical_ordinary_redundant_distinction():
@@ -91,15 +120,15 @@ def test_edge_classification_critical_ordinary_redundant_distinction():
     total_classified = len(classes["critical"]) + len(classes["ordinary"]) + len(classes["redundant"])
     assert total_classified == G.number_of_edges()
 
-    base_nd = analyze_structural_controllability(G).n_drivers
+    base_nd = analyze_structural_controllability(G).minimum_input_channels
     for u, v in classes["critical"]:
         G_rem = G.copy()
         G_rem.remove_edge(u, v)
-        assert analyze_structural_controllability(G_rem).n_drivers > base_nd
+        assert analyze_structural_controllability(G_rem).minimum_input_channels > base_nd
     for u, v in classes["ordinary"] + classes["redundant"]:
         G_rem = G.copy()
         G_rem.remove_edge(u, v)
-        assert analyze_structural_controllability(G_rem).n_drivers == base_nd
+        assert analyze_structural_controllability(G_rem).minimum_input_channels == base_nd
 
 
 def test_van_loan_vs_simpson_and_hurwitz_lyapunov_gramian():
@@ -134,9 +163,10 @@ def test_van_loan_vs_simpson_and_hurwitz_lyapunov_gramian():
     # 4. Pontryagin minimum-energy steering
     x0 = np.ones(G.number_of_nodes())
     xf = np.zeros(G.number_of_nodes())
-    traj = minimum_energy_trajectory(A, B, x0, xf, horizon=1.5, n_steps=80, reg=1e-8)
+    traj = minimum_energy_trajectory(A, B, x0, xf, horizon=1.5, n_steps=80, reg=0)
+    assert traj["exact_target_reachable"]
     assert float(traj["energy"]) > 0.0
-    assert float(traj["terminal_error"]) < 5e-3
+    assert np.allclose(traj["x"][-1], xf, atol=1e-7)
 
 
 def test_celf_lazy_greedy_exact_equivalence_and_submodularity():
@@ -167,13 +197,13 @@ def test_celf_lazy_greedy_exact_equivalence_and_submodularity():
     assert gain_sub >= gain_sup - 1e-10
 
 
-def test_neural_pinning_beats_fair_lqr_in_sample_and_unseen_inits():
+def test_seeded_neural_pinning_cost_against_care():
     G = reaction_cascade_network(n=16, branch_factor=2.1, seed=99)
     A = build_continuous_system_matrix(G, damping=0.55, coupling=0.35)
     sc = analyze_structural_controllability(G)
     pinned, _ = select_actuators_submodular(A, budget_k=5, mandatory_nodes=sc.driver_nodes[:2])
     B = build_input_matrix(G.number_of_nodes(), pinned)
-    # Fair CARE-LQR using identical (q_weight=3.0, r_weight=0.08) weights
+    # CARE-LQR using the same running (q_weight=3.0, r_weight=0.08) weights
     K_lqr, _ = solve_lqr_controller(A, B, q_weight=3.0, r_weight=0.08)
 
     x0 = np.linspace(1.2, 2.4, G.number_of_nodes())
