@@ -1,11 +1,15 @@
 """
-Automated benchmark runner and publication-grade figure generator for NetControl-Pinning-Lab.
+Automated benchmark runner and 300-DPI publication-grade figure generator for NetControl-Pinning-Lab.
+
+Styled to CCF-A / Top-Journal (IEEE TAC / Automatica / Nature Physics / Nature Communications)
+camera-ready standards: bold Times New Roman serif typography, STIX vector mathematics,
+4-sided #111111 boxed frames, inward ticks, and high-contrast academic color hierarchy.
 
 Generates:
 1. assets/driver_scaling_law.png: Driver node fraction n_D = N_D / N vs. average degree <k>
-   across Erdos-Renyi, Scale-Free (gamma=2.2, 2.7), Small-World, and Reaction Cascade networks.
+   across Erdos-Renyi, Scale-Free (gamma=2.2, 2.8), and asymptotic theory.
 2. assets/network_control_topology.png: Directed reaction-cascade network control map highlighting
-   Matched vs. Unmatched Driver Nodes and Critical / Ordinary / Redundant control links.
+   Matched vs. Minimum Driver Nodes and Critical / Ordinary / Redundant control links.
 3. assets/actuator_submodular_benchmark.png: Volumetric Controllability log det(W_c) and
    Minimum Control Energy comparison across Submodular Greedy, Out-Degree, PageRank, Betweenness, and Random.
 4. assets/neural_pinning_trajectories.png: 4-panel comparison of Uncontrolled, Linear Pinning,
@@ -19,9 +23,11 @@ import csv
 import json
 import sys
 from pathlib import Path
+from typing import Iterable, Tuple
 
 import matplotlib
 matplotlib.use("Agg")
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -48,13 +54,188 @@ from netcontrol import (
 )
 from netcontrol.gramian_lqr import build_input_matrix
 
+# High-contrast academic journal palette (IEEE TAC / Nature Physics)
+PALETTE_JOURNAL = {
+    "navy": "#1B4F72",
+    "emerald": "#0B6E4F",
+    "crimson": "#B03A2E",
+    "ochre": "#C55A11",
+    "plum": "#5B2C6F",
+    "slate": "#5D6D7E",
+    "teal": "#117864",
+    "gold": "#7D6608",
+    "charcoal": "#111111",
+}
 
-plt.rcParams.update({
-    "font.sans-serif": ["DejaVu Sans", "Arial", "Microsoft YaHei"],
-    "axes.unicode_minus": False,
-    "figure.dpi": 160,
-    "savefig.dpi": 240,
-})
+
+def configure_mpl_style() -> None:
+    """Configure global Matplotlib rcParams for 300-DPI IEEE TAC / Automatica figures."""
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "STIXGeneral", "DejaVu Serif"],
+            "font.weight": "bold",
+            "axes.labelweight": "bold",
+            "axes.titleweight": "bold",
+            "mathtext.fontset": "stix",
+            "axes.unicode_minus": False,
+            "font.size": 10.5,
+            "axes.titlesize": 11.4,
+            "axes.labelsize": 10.6,
+            "xtick.labelsize": 9.6,
+            "ytick.labelsize": 9.6,
+            "legend.fontsize": 8.5,
+            "figure.facecolor": "#FFFFFF",
+            "axes.facecolor": "#FFFFFF",
+            "savefig.facecolor": "#FFFFFF",
+            "axes.edgecolor": "#111111",
+            "axes.linewidth": 1.30,
+            "axes.spines.top": True,
+            "axes.spines.right": True,
+            "axes.spines.bottom": True,
+            "axes.spines.left": True,
+            "xtick.direction": "in",
+            "ytick.direction": "in",
+            "xtick.top": True,
+            "ytick.right": True,
+            "xtick.major.size": 4.5,
+            "ytick.major.size": 4.5,
+            "xtick.major.width": 1.2,
+            "ytick.major.width": 1.2,
+            "xtick.minor.size": 2.4,
+            "ytick.minor.size": 2.4,
+            "xtick.minor.width": 0.9,
+            "ytick.minor.width": 0.9,
+            "xtick.color": "#111111",
+            "ytick.color": "#111111",
+            "axes.grid": True,
+            "grid.linestyle": ":",
+            "grid.linewidth": 0.7,
+            "grid.alpha": 0.35,
+            "grid.color": "#94A3B8",
+            "legend.fancybox": False,
+            "legend.edgecolor": "#111111",
+            "legend.facecolor": "#FFFFFF",
+            "legend.framealpha": 0.96,
+            "figure.dpi": 300,
+            "savefig.dpi": 300,
+            "savefig.bbox": "tight",
+            "savefig.pad_inches": 0.08,
+        }
+    )
+
+
+def _finalize_journal_figure(
+    fig: plt.Figure,
+    categorical_axes: Iterable[plt.Axes] = (),
+    topology_axes: Iterable[plt.Axes] = (),
+) -> None:
+    """Enforce Times New Roman bold typography, 4-sided frames, and tick geometry across all axes."""
+    cat_set = set(categorical_axes)
+    topo_set = set(topology_axes)
+
+    fig.patch.set_facecolor("#FFFFFF")
+    fig.canvas.draw()
+
+    for ax in fig.axes:
+        ax.set_facecolor("#FFFFFF")
+        ax.set_axisbelow(True)
+
+        spine_lw = 1.20 if ax in topo_set else 1.30
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_edgecolor("#111111")
+            spine.set_linewidth(spine_lw)
+
+        if ax in topo_set:
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.grid(False)
+        elif ax in cat_set:
+            ax.tick_params(
+                axis="y",
+                which="major",
+                direction="in",
+                left=True,
+                right=True,
+                length=4.5,
+                width=1.2,
+                colors="#111111",
+            )
+            ax.tick_params(
+                axis="y",
+                which="minor",
+                direction="in",
+                left=True,
+                right=True,
+                length=2.4,
+                width=0.9,
+                colors="#111111",
+            )
+            ax.tick_params(
+                axis="x",
+                which="both",
+                direction="out",
+                bottom=True,
+                top=False,
+                length=4.0,
+                width=1.2,
+                colors="#111111",
+            )
+            ax.grid(True, axis="y", linestyle=":", linewidth=0.7, alpha=0.35, color="#94A3B8")
+            ax.grid(False, axis="x")
+        else:
+            ax.tick_params(
+                axis="both",
+                which="major",
+                direction="in",
+                top=True,
+                right=True,
+                bottom=True,
+                left=True,
+                length=4.5,
+                width=1.2,
+                colors="#111111",
+            )
+            ax.tick_params(
+                axis="both",
+                which="minor",
+                direction="in",
+                top=True,
+                right=True,
+                bottom=True,
+                left=True,
+                length=2.4,
+                width=0.9,
+                colors="#111111",
+            )
+            ax.grid(True, linestyle=":", linewidth=0.7, alpha=0.35, color="#94A3B8")
+
+        for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+            lbl.set_fontfamily("Times New Roman")
+            lbl.set_fontweight("bold")
+
+        for item in (ax.title, ax.xaxis.label, ax.yaxis.label):
+            item.set_fontfamily("Times New Roman")
+            item.set_fontweight("bold")
+
+        for txt in ax.texts:
+            txt.set_fontfamily("Times New Roman")
+            txt.set_fontweight("bold")
+
+        leg = ax.get_legend()
+        if leg is not None:
+            for ltxt in leg.get_texts():
+                ltxt.set_fontfamily("Times New Roman")
+                ltxt.set_fontweight("bold")
+            if leg.get_title() is not None:
+                leg.get_title().set_fontfamily("Times New Roman")
+                leg.get_title().set_fontweight("bold")
+            frame = leg.get_frame()
+            frame.set_linewidth(1.1)
+            frame.set_edgecolor("#111111")
+            frame.set_facecolor("#FFFFFF")
+            frame.set_alpha(0.96)
 
 
 def run_scaling_law_experiment(assets_dir: Path) -> dict:
@@ -85,30 +266,72 @@ def run_scaling_law_experiment(assets_dir: Path) -> dict:
         curves["Scale-Free (γ=2.2, Heterogeneous)"].append((float(np.mean(sf22)), float(np.std(sf22))))
         curves["Scale-Free (γ=2.8, Moderate)"].append((float(np.mean(sf28)), float(np.std(sf28))))
         curves["Erdős–Rényi (Random)"].append((float(np.mean(er_list)), float(np.std(er_list))))
-        curves["Theory: ER Asymptotic exp(-<k>/2)"].append((float(max(1.0 / n_nodes, np.exp(-0.5 * k))), 0.0))
+        curves["Theory: ER Asymptotic exp(-<k>/2)"].append(
+            (float(max(1.0 / n_nodes, np.exp(-0.5 * k))), 0.0)
+        )
 
-    fig, ax = plt.subplots(figsize=(7.5, 4.8))
+    fig, ax = plt.subplots(figsize=(8.4, 5.2))
     palette = {
-        "Scale-Free (γ=2.2, Heterogeneous)": ("#d95f02", "o", "-"),
-        "Scale-Free (γ=2.8, Moderate)": ("#7570b3", "s", "-"),
-        "Erdős–Rényi (Random)": ("#1b9e77", "^", "-"),
-        "Theory: ER Asymptotic exp(-<k>/2)": ("#333333", None, "--"),
+        "Scale-Free (γ=2.2, Heterogeneous)": (
+            PALETTE_JOURNAL["crimson"],
+            "o",
+            "-",
+            "Scale-Free ($\\gamma = 2.2$, Heterogeneous)",
+        ),
+        "Scale-Free (γ=2.8, Moderate)": (
+            PALETTE_JOURNAL["plum"],
+            "s",
+            "-",
+            "Scale-Free ($\\gamma = 2.8$, Moderate)",
+        ),
+        "Erdős–Rényi (Random)": (
+            PALETTE_JOURNAL["emerald"],
+            "^",
+            "-",
+            "Erdős–Rényi (Random)",
+        ),
+        "Theory: ER Asymptotic exp(-<k>/2)": (
+            PALETTE_JOURNAL["charcoal"],
+            None,
+            "--",
+            "Theory: ER Asymptotic $\\exp(-\\langle k \\rangle / 2)$",
+        ),
     }
 
-    for label, stats in curves.items():
+    for key, stats in curves.items():
         means = np.array([m for m, _ in stats])
         stds = np.array([s for _, s in stats])
-        color, marker, ls = palette[label]
-        ax.plot(k_values, means, label=label, color=color, marker=marker, linestyle=ls, linewidth=2.2, markersize=6)
+        color, marker, ls, disp_label = palette[key]
+        ax.plot(
+            k_values,
+            means,
+            label=disp_label,
+            color=color,
+            marker=marker,
+            linestyle=ls,
+            linewidth=2.3,
+            markersize=6.2,
+            markeredgecolor="#111111",
+            markeredgewidth=0.6,
+        )
         if np.any(stds > 0):
-            ax.fill_between(k_values, np.maximum(0, means - stds), np.minimum(1, means + stds), color=color, alpha=0.14)
+            ax.fill_between(
+                k_values,
+                np.maximum(0.0, means - stds),
+                np.minimum(1.0, means + stds),
+                color=color,
+                alpha=0.14,
+            )
 
-    ax.set_xlabel("Average Directed Degree <k>", fontsize=11, fontweight="bold")
-    ax.set_ylabel("Minimum Driver Node Fraction $n_D = N_D / N$", fontsize=11, fontweight="bold")
-    ax.set_title("Structural Controllability Scaling Law: Degree Heterogeneity vs. Randomness", fontsize=12, fontweight="bold")
-    ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(frameon=True, fontsize=9.5)
-    fig.tight_layout()
+    ax.set_xlabel("Average Directed Degree $\\langle k \\rangle$")
+    ax.set_ylabel("Minimum Driver Node Fraction $n_D = N_D / N$")
+    ax.set_title("Structural Controllability Scaling Law: Heterogeneity vs. Randomness", pad=8)
+    ax.set_xlim(0.65, 9.35)
+    ax.set_ylim(-0.02, 0.74)
+    ax.legend(loc="upper right", frameon=True, fancybox=False, fontsize=9.0)
+
+    fig.tight_layout(pad=1.10)
+    _finalize_journal_figure(fig)
     fig.savefig(assets_dir / "driver_scaling_law.png")
     plt.close(fig)
 
@@ -126,9 +349,11 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
     edge_classes = classify_control_edges(G)
     pbh_ok, pbh_rank = verify_pbh_controllability(G, sc_res.driver_nodes, seed=42)
 
-    fig, axes = plt.subplots(1, 2, figsize=(12.2, 5.2), gridspec_kw={"width_ratios": [1.55, 1.0]})
+    fig, axes = plt.subplots(
+        1, 2, figsize=(13.4, 5.7), gridspec_kw={"width_ratios": [1.58, 1.0]}
+    )
 
-    # Panel A: Hierarchical layout of Reaction Cascade Network
+    # Panel (a): Hierarchical layout of Reaction Cascade Network
     ax = axes[0]
     pos = {}
     tiers = {"precursor": [], "intermediate": [], "byproduct": []}
@@ -148,44 +373,138 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
 
     # Draw edges by criticality class
     edge_colors = {
-        "critical": "#e41a1c",
-        "ordinary": "#377eb8",
-        "redundant": "#bdbdbd",
+        "critical": PALETTE_JOURNAL["crimson"],
+        "ordinary": PALETTE_JOURNAL["navy"],
+        "redundant": PALETTE_JOURNAL["slate"],
     }
-    for cls_name, e_list in [("redundant", edge_classes["redundant"]),
-                             ("ordinary", edge_classes["ordinary"]),
-                             ("critical", edge_classes["critical"])]:
+    for cls_name, e_list in [
+        ("redundant", edge_classes["redundant"]),
+        ("ordinary", edge_classes["ordinary"]),
+        ("critical", edge_classes["critical"]),
+    ]:
         if e_list:
             nx.draw_networkx_edges(
-                G, pos, edgelist=e_list, ax=ax,
+                G,
+                pos,
+                edgelist=e_list,
+                ax=ax,
                 edge_color=edge_colors[cls_name],
-                width=2.1 if cls_name == "critical" else (1.3 if cls_name == "ordinary" else 0.9),
+                width=2.3 if cls_name == "critical" else (1.3 if cls_name == "ordinary" else 1.0),
                 style="solid" if cls_name != "redundant" else "dashed",
-                alpha=0.85 if cls_name == "critical" else 0.55,
-                arrows=True, arrowsize=11, node_size=260,
+                alpha=0.92 if cls_name == "critical" else (0.58 if cls_name == "ordinary" else 0.50),
+                arrows=True,
+                arrowsize=11,
+                node_size=280,
             )
 
     nx.draw_networkx_nodes(
-        G, pos, nodelist=matched_nodes, ax=ax,
-        node_color="#4daf4a", node_size=240, edgecolors="#1b4332", linewidths=1.2,
-        label=f"Matched State Nodes ({len(matched_nodes)})",
+        G,
+        pos,
+        nodelist=matched_nodes,
+        ax=ax,
+        node_color="#D4EFDF",
+        node_size=265,
+        edgecolors=PALETTE_JOURNAL["emerald"],
+        linewidths=1.8,
     )
     nx.draw_networkx_nodes(
-        G, pos, nodelist=sc_res.driver_nodes, ax=ax,
-        node_color="#ff7f00", node_size=340, node_shape="^", edgecolors="#7f2704", linewidths=1.5,
-        label=f"Minimum Driver Nodes N_D ({sc_res.n_drivers})",
+        G,
+        pos,
+        nodelist=sc_res.driver_nodes,
+        ax=ax,
+        node_color="#FDEBD0",
+        node_size=360,
+        node_shape="^",
+        edgecolors=PALETTE_JOURNAL["ochre"],
+        linewidths=2.0,
     )
-    nx.draw_networkx_labels(G, pos, ax=ax, font_size=7.5, font_color="#111111", font_weight="bold")
-    ax.set_title(
-        f"A. Ozone-Pollutant Reaction Cascade Network (N={sc_res.n_nodes}, N_D={sc_res.n_drivers}, PBH Rank={pbh_rank}/{sc_res.n_nodes})",
-        fontsize=10.5, fontweight="bold",
+    lbl_artists = nx.draw_networkx_labels(
+        G,
+        pos,
+        ax=ax,
+        font_size=7.8,
+        font_color="#111111",
+        font_family="Times New Roman",
+        font_weight="bold",
     )
-    ax.legend(loc="upper right", fontsize=8.5, frameon=True)
-    ax.axis("off")
+    for txt_obj in lbl_artists.values():
+        txt_obj.set_fontfamily("Times New Roman")
+        txt_obj.set_fontweight("bold")
 
-    # Panel B: Edge Classification & Topology Summary Comparison
+    legend_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="none",
+            markerfacecolor="#D4EFDF",
+            markeredgecolor=PALETTE_JOURNAL["emerald"],
+            markeredgewidth=1.7,
+            markersize=8.2,
+            label=f"Matched Nodes ({len(matched_nodes)})",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="^",
+            color="none",
+            markerfacecolor="#FDEBD0",
+            markeredgecolor=PALETTE_JOURNAL["ochre"],
+            markeredgewidth=1.8,
+            markersize=9.0,
+            label=f"Driver Nodes $N_D$ ({sc_res.n_drivers})",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=PALETTE_JOURNAL["crimson"],
+            linewidth=2.3,
+            linestyle="-",
+            label=f"Critical Links ({len(edge_classes['critical'])})",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=PALETTE_JOURNAL["navy"],
+            linewidth=1.5,
+            linestyle="-",
+            label=f"Ordinary Links ({len(edge_classes['ordinary'])})",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=PALETTE_JOURNAL["slate"],
+            linewidth=1.2,
+            linestyle="--",
+            label=f"Redundant Links ({len(edge_classes['redundant'])})",
+        ),
+    ]
+    ax.set_xlim(-0.85, 10.85)
+    ax.set_ylim(-0.52, 2.96)
+    ax.set_title(
+        f"(a) Ozone–Pollutant Cascade ($N = {sc_res.n_nodes}$, $N_D = {sc_res.n_drivers}$, "
+        f"$\\mathrm{{rank}}_{{\\mathrm{{PBH}}}} = {pbh_rank}/{sc_res.n_nodes}$)",
+        pad=8,
+    )
+    ax.legend(
+        handles=legend_handles,
+        loc="upper center",
+        ncol=3,
+        fontsize=8.0,
+        columnspacing=0.9,
+        handletextpad=0.45,
+        frameon=True,
+        fancybox=False,
+    )
+
+    # Panel (b): Edge Classification & Topology Summary Comparison
     ax2 = axes[1]
-    topo_names = ["Reaction\nCascade", "Scale-Free\n(γ=2.3)", "Small-World\n(WS)", "Erdős–Rényi\n(Random)"]
+    topo_names = [
+        "Reaction\nCascade",
+        "Scale-Free\n($\\gamma = 2.3$)",
+        "Small-World\n(WS)",
+        "Erdős–Rényi\n(Random)",
+    ]
     graphs = [
         G,
         scale_free_directed(32, mean_degree=2.8, gamma_exp=2.3, seed=42),
@@ -202,26 +521,65 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
         nd_fracs.append(analyze_structural_controllability(g_item).driver_fraction)
 
     x_idx = np.arange(len(topo_names))
-    w = 0.52
-    ax2.bar(x_idx, crit_fracs, width=w, color="#e41a1c", label="Critical Links")
-    ax2.bar(x_idx, ord_fracs, width=w, bottom=crit_fracs, color="#377eb8", label="Ordinary Links")
+    w = 0.50
     ax2.bar(
-        x_idx, red_fracs, width=w,
+        x_idx,
+        crit_fracs,
+        width=w,
+        color=PALETTE_JOURNAL["crimson"],
+        edgecolor="#111111",
+        linewidth=0.95,
+        label="Critical",
+    )
+    ax2.bar(
+        x_idx,
+        ord_fracs,
+        width=w,
+        bottom=crit_fracs,
+        color=PALETTE_JOURNAL["navy"],
+        edgecolor="#111111",
+        linewidth=0.95,
+        label="Ordinary",
+    )
+    ax2.bar(
+        x_idx,
+        red_fracs,
+        width=w,
         bottom=np.array(crit_fracs) + np.array(ord_fracs),
-        color="#bdbdbd", label="Redundant Links",
+        color="#CBD5E1",
+        edgecolor="#111111",
+        linewidth=0.95,
+        hatch="//",
+        label="Redundant",
     )
     for idx, nd_val in enumerate(nd_fracs):
-        ax2.text(idx, 1.03, f"$n_D$={nd_val:.2f}", ha="center", va="bottom", fontsize=8.5, fontweight="bold", color="#d95f02")
+        ax2.text(
+            idx,
+            1.025,
+            f"$n_D = {nd_val:.2f}$",
+            ha="center",
+            va="bottom",
+            fontsize=8.6,
+            color=PALETTE_JOURNAL["crimson"],
+        )
 
     ax2.set_xticks(x_idx)
-    ax2.set_xticklabels(topo_names, fontsize=9)
-    ax2.set_ylim(0, 1.15)
-    ax2.set_ylabel("Fraction of Directed Edges", fontsize=10, fontweight="bold")
-    ax2.set_title("B. Structural Control Link Classification", fontsize=10.5, fontweight="bold")
-    ax2.legend(loc="lower right", fontsize=8.5, frameon=True)
-    ax2.grid(axis="y", linestyle=":", alpha=0.5)
+    ax2.set_xticklabels(topo_names, fontsize=9.0)
+    ax2.set_ylim(0.0, 1.28)
+    ax2.set_ylabel("Fraction of Directed Edges")
+    ax2.set_title("(b) Structural Control Link Classification", pad=8)
+    ax2.legend(
+        loc="upper center",
+        ncol=3,
+        fontsize=8.0,
+        columnspacing=0.8,
+        handletextpad=0.4,
+        frameon=True,
+        fancybox=False,
+    )
 
-    fig.tight_layout()
+    fig.tight_layout(pad=1.15)
+    _finalize_journal_figure(fig, categorical_axes=(ax2,), topology_axes=(ax,))
     fig.savefig(assets_dir / "network_control_topology.png")
     plt.close(fig)
 
@@ -263,40 +621,67 @@ def run_submodular_gramian_experiment(assets_dir: Path) -> dict:
             ("Betweenness", "betweenness"),
             ("Random", "random"),
         ]:
-            sel_b, m_b = select_actuators_baseline(G, A, budget_k=k, strategy=strat_key, horizon=2.0, reg=1e-5, seed=42 + k)
+            sel_b, m_b = select_actuators_baseline(
+                G, A, budget_k=k, strategy=strat_key, horizon=2.0, reg=1e-5, seed=42 + k
+            )
             B_b = build_input_matrix(G.number_of_nodes(), sel_b)
             traj_b = minimum_energy_trajectory(A, B_b, x0, xf, horizon=2.0, reg=1e-4)
             logdet_records[m_label].append(m_b["log_det"])
             energy_records[m_label].append(float(traj_b["energy"]))
 
-    fig, axes = plt.subplots(1, 2, figsize=(11.8, 4.6))
+    fig, axes = plt.subplots(1, 2, figsize=(12.6, 5.0))
     style_map = {
-        "Submodular Greedy (Ours)": ("#e41a1c", "o", "-", 2.4),
-        "Out-Degree Hubs": ("#377eb8", "s", "--", 1.8),
-        "PageRank": ("#4daf4a", "^", "-.", 1.8),
-        "Betweenness": ("#984ea3", "D", ":", 1.8),
-        "Random": ("#7f7f7f", "x", ":", 1.5),
+        "Submodular Greedy (Ours)": (PALETTE_JOURNAL["crimson"], "o", "-", 2.6),
+        "Out-Degree Hubs": (PALETTE_JOURNAL["navy"], "s", "--", 2.0),
+        "PageRank": (PALETTE_JOURNAL["emerald"], "^", "-.", 2.0),
+        "Betweenness": (PALETTE_JOURNAL["plum"], "D", ":", 2.0),
+        "Random": (PALETTE_JOURNAL["slate"], "X", ":", 1.7),
     }
 
     for m_label in methods:
         c, mk, ls, lw = style_map[m_label]
-        axes[0].plot(budgets, logdet_records[m_label], label=m_label, color=c, marker=mk, linestyle=ls, linewidth=lw)
-        axes[1].plot(budgets, energy_records[m_label], label=m_label, color=c, marker=mk, linestyle=ls, linewidth=lw)
+        axes[0].plot(
+            budgets,
+            logdet_records[m_label],
+            label=m_label,
+            color=c,
+            marker=mk,
+            markersize=6.0,
+            markeredgecolor="#111111",
+            markeredgewidth=0.55,
+            linestyle=ls,
+            linewidth=lw,
+        )
+        axes[1].plot(
+            budgets,
+            energy_records[m_label],
+            label=m_label,
+            color=c,
+            marker=mk,
+            markersize=6.0,
+            markeredgecolor="#111111",
+            markeredgewidth=0.55,
+            linestyle=ls,
+            linewidth=lw,
+        )
 
-    axes[0].set_xlabel("Actuator Node Budget $K = |\\mathcal{P}|$", fontsize=10.5, fontweight="bold")
-    axes[0].set_ylabel("Volumetric Controllability $\\log\\det(W_c + \\epsilon I)$", fontsize=10.5, fontweight="bold")
-    axes[0].set_title("A. Submodular Gramian Maximization", fontsize=11, fontweight="bold")
-    axes[0].grid(True, linestyle=":", alpha=0.6)
-    axes[0].legend(fontsize=8.5, frameon=True)
+    axes[0].set_xlabel("Actuator Node Budget $K = |S_{\\mathrm{pin}}|$")
+    axes[0].set_ylabel("Volumetric Controllability $\\log\\det(\\mathbf{W}_c + \\varepsilon \\mathbf{I})$")
+    axes[0].set_title("(a) Submodular Gramian Maximization", pad=8)
+    axes[0].set_xlim(3.4, 15.6)
+    axes[0].set_ylim(-292.0, -82.0)
+    axes[0].legend(loc="upper left", fontsize=8.4, frameon=True, fancybox=False)
 
     axes[1].set_yscale("log")
-    axes[1].set_xlabel("Actuator Node Budget $K = |\\mathcal{P}|$", fontsize=10.5, fontweight="bold")
-    axes[1].set_ylabel("Minimum Steering Energy $\\mathcal{E}^*(x_0 \\to 0)$ [log scale]", fontsize=10.5, fontweight="bold")
-    axes[1].set_title("B. Pontryagin Minimum Control Energy vs. Budget", fontsize=11, fontweight="bold")
-    axes[1].grid(True, linestyle=":", alpha=0.6)
-    axes[1].legend(fontsize=8.5, frameon=True)
+    axes[1].set_xlabel("Actuator Node Budget $K = |S_{\\mathrm{pin}}|$")
+    axes[1].set_ylabel("Minimum Steering Energy $E^*(\\mathbf{x}_0 \\to \\mathbf{0})$ (Log Scale)")
+    axes[1].set_title("(b) Pontryagin Minimum Control Energy vs. Budget", pad=8)
+    axes[1].set_xlim(3.4, 15.6)
+    axes[1].set_ylim(1.2e2, 2.4e4)
+    axes[1].legend(loc="upper right", fontsize=8.4, frameon=True, fancybox=False)
 
-    fig.tight_layout()
+    fig.tight_layout(pad=1.15)
+    _finalize_journal_figure(fig)
     fig.savefig(assets_dir / "actuator_submodular_benchmark.png")
     plt.close(fig)
 
@@ -320,7 +705,9 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
     sc = analyze_structural_controllability(G)
 
     budget_k = 8
-    pinned_sub, _ = select_actuators_submodular(A, budget_k=budget_k, horizon=2.5, mandatory_nodes=sc.driver_nodes[:4])
+    pinned_sub, _ = select_actuators_submodular(
+        A, budget_k=budget_k, horizon=2.5, mandatory_nodes=sc.driver_nodes[:4]
+    )
     B_pin = build_input_matrix(G.number_of_nodes(), pinned_sub)
     K_lqr, _ = solve_lqr_controller(A, B_pin, q_weight=3.0, r_weight=0.12)
 
@@ -346,70 +733,187 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
     # Also compare random actuator placement with linear pinning
     pinned_rand, _ = select_actuators_baseline(G, A, budget_k=budget_k, strategy="random", seed=99)
 
-    sim_uncontrolled = simulate_nonlinear_pinning(A, x0, pinned_sub, mode="uncontrolled", horizon=4.0, n_steps=80)
-    sim_rand_lin = simulate_nonlinear_pinning(A, x0, pinned_rand, mode="linear_pinning", kp_linear=2.4, horizon=4.0, n_steps=80)
-    sim_sub_lin = simulate_nonlinear_pinning(A, x0, pinned_sub, mode="linear_pinning", kp_linear=2.4, horizon=4.0, n_steps=80)
-    sim_lqr = simulate_nonlinear_pinning(A, x0, pinned_sub, mode="lqr_pinning", K_lqr=K_lqr, horizon=4.0, n_steps=80)
+    sim_uncontrolled = simulate_nonlinear_pinning(
+        A, x0, pinned_sub, mode="uncontrolled", horizon=4.0, n_steps=80
+    )
+    sim_rand_lin = simulate_nonlinear_pinning(
+        A, x0, pinned_rand, mode="linear_pinning", kp_linear=2.4, horizon=4.0, n_steps=80
+    )
+    sim_sub_lin = simulate_nonlinear_pinning(
+        A, x0, pinned_sub, mode="linear_pinning", kp_linear=2.4, horizon=4.0, n_steps=80
+    )
+    sim_lqr = simulate_nonlinear_pinning(
+        A, x0, pinned_sub, mode="lqr_pinning", K_lqr=K_lqr, horizon=4.0, n_steps=80
+    )
     sim_gnn = simulate_nonlinear_pinning(
         A, x0, pinned_sub, mode="gnn_pinning", gnn_controller=gnn_ctrl, horizon=4.0, n_steps=80
     )
 
-    fig, axes = plt.subplots(2, 2, figsize=(12.0, 8.2))
+    fig, axes = plt.subplots(2, 2, figsize=(12.8, 8.8))
 
-    # Panel A: State Norm ||x(t)||_2 Trajectory
+    # Panel (a): State Norm ||x(t)||_2 Trajectory
     ax = axes[0, 0]
     ts = sim_gnn["t"]
-    ax.plot(ts, sim_uncontrolled["state_norms"], label="Uncontrolled Cascade", color="#7f7f7f", linestyle=":", linewidth=2.0)
-    ax.plot(ts, sim_rand_lin["state_norms"], label="Random Pinning + Linear Gain", color="#ff7f00", linestyle="--", linewidth=1.9)
-    ax.plot(ts, sim_sub_lin["state_norms"], label="Submodular Pinning + Linear Gain", color="#377eb8", linestyle="-.", linewidth=2.0)
-    ax.plot(ts, sim_lqr["state_norms"], label="Submodular Pinning + CARE LQR", color="#4daf4a", linestyle="-", linewidth=2.1)
-    ax.plot(ts, sim_gnn["state_norms"], label="Submodular + Graph Neural Pinning (Ours)", color="#e41a1c", linestyle="-", linewidth=2.6)
-    ax.axhline(0.15 * float(sim_gnn["state_norms"][0]), color="#222222", linestyle="--", alpha=0.45, label="15% Safe Threshold")
-    ax.set_xlabel("Time $t$ (s)", fontsize=10, fontweight="bold")
-    ax.set_ylabel("Network Pollutant Norm $\\|x(t)\\|_2$", fontsize=10, fontweight="bold")
-    ax.set_title("A. Nonlinear Cascade State Suppression", fontsize=11, fontweight="bold")
-    ax.legend(fontsize=8, frameon=True)
-    ax.grid(True, linestyle=":", alpha=0.6)
+    ax.plot(
+        ts,
+        sim_uncontrolled["state_norms"],
+        label="Uncontrolled Cascade",
+        color=PALETTE_JOURNAL["slate"],
+        linestyle=":",
+        linewidth=2.2,
+    )
+    ax.plot(
+        ts,
+        sim_rand_lin["state_norms"],
+        label="Random Pinning + Linear Gain",
+        color=PALETTE_JOURNAL["ochre"],
+        linestyle="--",
+        linewidth=2.0,
+    )
+    ax.plot(
+        ts,
+        sim_sub_lin["state_norms"],
+        label="Submodular Pinning + Linear Gain",
+        color=PALETTE_JOURNAL["navy"],
+        linestyle="-.",
+        linewidth=2.1,
+    )
+    ax.plot(
+        ts,
+        sim_lqr["state_norms"],
+        label="Submodular Pinning + CARE LQR",
+        color=PALETTE_JOURNAL["emerald"],
+        linestyle="-",
+        linewidth=2.2,
+    )
+    ax.plot(
+        ts,
+        sim_gnn["state_norms"],
+        label="Submodular + Graph Neural Pinning (Ours)",
+        color=PALETTE_JOURNAL["crimson"],
+        linestyle="-",
+        linewidth=2.7,
+    )
+    ax.axhline(
+        0.15 * float(sim_gnn["state_norms"][0]),
+        color="#111111",
+        linestyle="--",
+        linewidth=1.3,
+        alpha=0.75,
+        label="15% Safe Threshold",
+    )
+    ax.set_xlabel("Time $t$ ($\\mathrm{s}$)")
+    ax.set_ylabel("Network Pollutant Norm $||\\mathbf{x}(t)||_2$")
+    ax.set_title("(a) Nonlinear Cascade State Suppression", pad=8)
+    ax.set_xlim(-0.1, 4.1)
+    ax.set_ylim(0.8, 12.1)
+    # Place legend strictly between y=2.0 (above 1.62 threshold) and y=6.3 (below trajectories at t < 1.9)
+    ax.legend(
+        loc="lower left",
+        bbox_to_anchor=(0.02, 0.11),
+        fontsize=7.9,
+        frameon=True,
+        fancybox=False,
+    )
 
-    # Panel B: Individual Node Trajectories under Graph Neural Pinning
+    # Panel (b): Individual Node Trajectories under Graph Neural Pinning
     ax = axes[0, 1]
     x_gnn = sim_gnn["x"]
+    ax.axhline(0.0, color="#111111", linestyle=":", linewidth=1.0, alpha=0.55)
     for i in range(G.number_of_nodes()):
         is_pin = i in set(pinned_sub)
         ax.plot(
-            ts, x_gnn[:, i],
-            color="#e41a1c" if is_pin else "#457b9d",
-            alpha=0.85 if is_pin else 0.35,
-            linewidth=1.6 if is_pin else 1.0,
+            ts,
+            x_gnn[:, i],
+            color=PALETTE_JOURNAL["crimson"] if is_pin else PALETTE_JOURNAL["navy"],
+            alpha=0.88 if is_pin else 0.30,
+            linewidth=1.65 if is_pin else 1.05,
         )
-    ax.plot([], [], color="#e41a1c", linewidth=1.8, label=f"Pinned Actuator Nodes (K={budget_k})")
-    ax.plot([], [], color="#457b9d", alpha=0.6, linewidth=1.2, label=f"Unpinned Network Nodes ({G.number_of_nodes() - budget_k})")
-    ax.set_xlabel("Time $t$ (s)", fontsize=10, fontweight="bold")
-    ax.set_ylabel("Node Concentration $x_i(t)$", fontsize=10, fontweight="bold")
-    ax.set_title("B. Node-Level Synchronization to Safe Equilibrium", fontsize=11, fontweight="bold")
-    ax.legend(fontsize=8.5, frameon=True)
-    ax.grid(True, linestyle=":", alpha=0.6)
+    ax.plot(
+        [],
+        [],
+        color=PALETTE_JOURNAL["crimson"],
+        linewidth=1.9,
+        label=f"Pinned Actuator Nodes ($K = {budget_k}$)",
+    )
+    ax.plot(
+        [],
+        [],
+        color=PALETTE_JOURNAL["navy"],
+        alpha=0.65,
+        linewidth=1.3,
+        label=f"Unpinned Network Nodes ($N - K = {G.number_of_nodes() - budget_k}$)",
+    )
+    ax.set_xlabel("Time $t$ ($\\mathrm{s}$)")
+    ax.set_ylabel("Node Concentration $x_i(t)$")
+    ax.set_title("(b) Node-Level Synchronization to Safe Equilibrium", pad=8)
+    ax.set_xlim(-0.1, 4.1)
+    ax.set_ylim(-2.90, 3.45)
+    ax.legend(loc="upper right", fontsize=8.4, frameon=True, fancybox=False)
 
-    # Panel C: Control Input Signals u_P(t) for Graph Neural Pinning
+    # Panel (c): Control Input Signals u_P(t) for Graph Neural Pinning
     ax = axes[1, 0]
     u_gnn = sim_gnn["u"]
+    node_colors = [
+        PALETTE_JOURNAL["navy"],
+        PALETTE_JOURNAL["emerald"],
+        PALETTE_JOURNAL["crimson"],
+        PALETTE_JOURNAL["ochre"],
+        PALETTE_JOURNAL["plum"],
+        PALETTE_JOURNAL["slate"],
+        PALETTE_JOURNAL["teal"],
+        PALETTE_JOURNAL["gold"],
+    ]
+    ax.axhline(0.0, color="#111111", linestyle=":", linewidth=1.0, alpha=0.55)
     for j, node_id in enumerate(pinned_sub):
-        ax.plot(ts, u_gnn[:, j], linewidth=1.6, label=f"Node #{node_id}")
-    ax.set_xlabel("Time $t$ (s)", fontsize=10, fontweight="bold")
-    ax.set_ylabel("Pinning Control Input $u_i(t)$", fontsize=10, fontweight="bold")
-    ax.set_title("C. Bounded Graph Neural Control Actions $u_{\\mathcal{P}}(t)$", fontsize=11, fontweight="bold")
-    ax.legend(ncol=2, fontsize=7.8, frameon=True)
-    ax.grid(True, linestyle=":", alpha=0.6)
+        ax.plot(
+            ts,
+            u_gnn[:, j],
+            color=node_colors[j % len(node_colors)],
+            linewidth=1.75,
+            label=f"Node #{node_id}",
+        )
+    ax.set_xlabel("Time $t$ ($\\mathrm{s}$)")
+    ax.set_ylabel("Pinning Control Input $u_i(t)$")
+    ax.set_title("(c) Bounded Graph Neural Control Actions $\\mathbf{u}_{\\mathrm{pin}}(t)$", pad=8)
+    ax.set_xlim(-0.1, 4.1)
+    ax.set_ylim(-6.55, 2.95)
+    ax.legend(loc="lower right", ncol=2, fontsize=8.0, frameon=True, fancybox=False)
 
-    # Panel D: Differentiable ODE Training Convergence & Method Comparison Bar
+    # Panel (d): Differentiable ODE Training Convergence
     ax = axes[1, 1]
-    ax.plot(range(1, len(train_losses) + 1), train_losses, color="#6a3d9a", marker="o", markersize=3.5, linewidth=2.0)
-    ax.set_xlabel("Differentiable RK4 Training Epoch", fontsize=10, fontweight="bold")
-    ax.set_ylabel("Total Trajectory Loss $\\mathcal{L}(\\theta)$", fontsize=10, fontweight="bold")
-    ax.set_title("D. Differentiable Graph Neural Controller Optimization", fontsize=11, fontweight="bold")
-    ax.grid(True, linestyle=":", alpha=0.6)
+    epochs_arr = np.arange(1, len(train_losses) + 1)
+    ax.plot(
+        epochs_arr,
+        train_losses,
+        color=PALETTE_JOURNAL["plum"],
+        marker="o",
+        markersize=3.8,
+        markeredgecolor="#111111",
+        markeredgewidth=0.45,
+        linewidth=2.2,
+        label="RK4 Adjoint Cost $J(\\boldsymbol{\\theta})$",
+    )
+    loss_drop_pct = 100.0 * (train_losses[-1] - train_losses[0]) / max(1e-9, train_losses[0])
+    ax.text(
+        0.44,
+        0.54,
+        f"Initial Loss: ${train_losses[0]:.1f}$\n"
+        f"Converged Loss: ${train_losses[-1]:.1f}$\n"
+        f"Reduction: ${loss_drop_pct:.1f}\\%$",
+        transform=ax.transAxes,
+        fontsize=8.8,
+        bbox=dict(boxstyle="square,pad=0.34", fc="#F8F9F9", ec="#111111", lw=1.0, alpha=0.96),
+    )
+    ax.set_xlabel("Differentiable RK4 Training Epoch")
+    ax.set_ylabel("Total Trajectory Cost $J(\\boldsymbol{\\theta})$")
+    ax.set_title("(d) Differentiable Graph Neural Controller Optimization", pad=8)
+    ax.set_xlim(0.0, len(train_losses) + 1.5)
+    ax.set_ylim(660.0, 1345.0)
+    ax.legend(loc="upper right", fontsize=8.4, frameon=True, fancybox=False)
 
-    fig.tight_layout()
+    fig.tight_layout(pad=1.15)
+    _finalize_journal_figure(fig)
     fig.savefig(assets_dir / "neural_pinning_trajectories.png")
     plt.close(fig)
 
@@ -421,14 +925,16 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
         ("Submodular Pinning + Algebraic Riccati LQR", sim_lqr),
         ("Submodular Pinning + Graph Neural Controller (Ours)", sim_gnn),
     ]:
-        rows.append({
-            "strategy": name,
-            "ise_state": round(float(sim["ise_state"]), 4),
-            "control_energy": round(float(sim["control_energy"]), 4),
-            "total_cost_J": round(float(sim["total_j"]), 4),
-            "terminal_norm": round(float(sim["terminal_norm"]), 4),
-            "settling_time_s": round(float(sim["settling_time"]), 3),
-        })
+        rows.append(
+            {
+                "strategy": name,
+                "ise_state": round(float(sim["ise_state"]), 4),
+                "control_energy": round(float(sim["control_energy"]), 4),
+                "total_cost_J": round(float(sim["total_j"]), 4),
+                "terminal_norm": round(float(sim["terminal_norm"]), 4),
+                "settling_time_s": round(float(sim["settling_time"]), 3),
+            }
+        )
 
     return {
         "n_nodes": G.number_of_nodes(),
@@ -441,6 +947,7 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
 
 
 def main() -> None:
+    configure_mpl_style()
     assets_dir = ROOT / "assets"
     results_dir = ROOT / "results"
     assets_dir.mkdir(parents=True, exist_ok=True)
@@ -471,7 +978,14 @@ def main() -> None:
     with open(results_dir / "benchmark_table.csv", "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["strategy", "ise_state", "control_energy", "total_cost_J", "terminal_norm", "settling_time_s"],
+            fieldnames=[
+                "strategy",
+                "ise_state",
+                "control_energy",
+                "total_cost_J",
+                "terminal_norm",
+                "settling_time_s",
+            ],
         )
         writer.writeheader()
         writer.writerows(table_rows)
