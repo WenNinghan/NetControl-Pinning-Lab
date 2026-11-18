@@ -709,7 +709,8 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
         A, budget_k=budget_k, horizon=2.5, mandatory_nodes=sc.driver_nodes[:4]
     )
     B_pin = build_input_matrix(G.number_of_nodes(), pinned_sub)
-    K_lqr, _ = solve_lqr_controller(A, B_pin, q_weight=3.0, r_weight=0.12)
+    # Exact fair LQR baseline using the identical (q_weight=3.0, r_weight=0.08) weights
+    K_lqr, _ = solve_lqr_controller(A, B_pin, q_weight=3.0, r_weight=0.08)
 
     rng = np.random.default_rng(2026)
     x0 = rng.uniform(1.2, 2.8, size=G.number_of_nodes())
@@ -722,10 +723,12 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
         x0=x0,
         horizon=4.0,
         n_steps=80,
-        epochs=50,
+        epochs=55,
         lr=0.035,
         q_state=3.0,
         r_ctrl=0.08,
+        q_term=12.0,
+        n_train_inits=8,
         regime="pollutant_cascade",
         seed=2026,
     )
@@ -909,13 +912,31 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
     ax.set_ylabel("Total Trajectory Cost $J(\\boldsymbol{\\theta})$")
     ax.set_title("(d) Differentiable Graph Neural Controller Optimization", pad=8)
     ax.set_xlim(0.0, len(train_losses) + 1.5)
-    ax.set_ylim(660.0, 1345.0)
+    y_lo = min(train_losses) * 0.93
+    y_hi = max(train_losses) * 1.07
+    ax.set_ylim(y_lo, y_hi)
     ax.legend(loc="upper right", fontsize=8.4, frameon=True, fancybox=False)
 
     fig.tight_layout(pad=1.15)
     _finalize_journal_figure(fig)
     fig.savefig(assets_dir / "neural_pinning_trajectories.png")
     plt.close(fig)
+
+    # Evaluate zero-shot generalization across 10 unseen random initial states
+    rng_test = np.random.default_rng(9090)
+    unseen_lqr_j, unseen_gnn_j, unseen_lqr_ise, unseen_gnn_ise = [], [], [], []
+    for _ in range(10):
+        x0_unseen = rng_test.uniform(1.0, 3.0, size=G.number_of_nodes())
+        s_lqr_u = simulate_nonlinear_pinning(
+            A, x0_unseen, pinned_sub, mode="lqr_pinning", K_lqr=K_lqr, horizon=4.0, n_steps=80
+        )
+        s_gnn_u = simulate_nonlinear_pinning(
+            A, x0_unseen, pinned_sub, mode="gnn_pinning", gnn_controller=gnn_ctrl, horizon=4.0, n_steps=80
+        )
+        unseen_lqr_j.append(float(s_lqr_u["total_j"]))
+        unseen_gnn_j.append(float(s_gnn_u["total_j"]))
+        unseen_lqr_ise.append(float(s_lqr_u["ise_state"]))
+        unseen_gnn_ise.append(float(s_gnn_u["ise_state"]))
 
     rows = []
     for name, sim in [
@@ -930,6 +951,7 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
                 "strategy": name,
                 "ise_state": round(float(sim["ise_state"]), 4),
                 "control_energy": round(float(sim["control_energy"]), 4),
+                "running_cost_J": round(float(sim["running_j"]), 4),
                 "total_cost_J": round(float(sim["total_j"]), 4),
                 "terminal_norm": round(float(sim["terminal_norm"]), 4),
                 "settling_time_s": round(float(sim["settling_time"]), 3),
@@ -942,6 +964,13 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
         "selected_pinned_nodes": pinned_sub,
         "training_initial_loss": round(train_losses[0], 4),
         "training_final_loss": round(train_losses[-1], 4),
+        "unseen_initial_states_eval": {
+            "n_unseen_trials": 10,
+            "lqr_mean_ise": round(float(np.mean(unseen_lqr_ise)), 4),
+            "gnn_mean_ise": round(float(np.mean(unseen_gnn_ise)), 4),
+            "lqr_mean_total_J": round(float(np.mean(unseen_lqr_j)), 4),
+            "gnn_mean_total_J": round(float(np.mean(unseen_gnn_j)), 4),
+        },
         "comparison": rows,
     }, rows
 
@@ -982,6 +1011,7 @@ def main() -> None:
                 "strategy",
                 "ise_state",
                 "control_energy",
+                "running_cost_J",
                 "total_cost_J",
                 "terminal_norm",
                 "settling_time_s",

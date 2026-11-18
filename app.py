@@ -87,7 +87,7 @@ with tab1:
     )
     pinned_rand, _ = select_actuators_baseline(G, A, budget_k=budget_k, strategy="random", seed=int(seed) + 1)
     B_pin = build_input_matrix(n_nodes, pinned_sub)
-    K_lqr, _ = solve_lqr_controller(A, B_pin, q_weight=3.0, r_weight=0.12)
+    K_lqr, _ = solve_lqr_controller(A, B_pin, q_weight=3.0, r_weight=0.08)
 
     rng = np.random.default_rng(int(seed))
     x0 = rng.uniform(1.2, 2.6, size=n_nodes)

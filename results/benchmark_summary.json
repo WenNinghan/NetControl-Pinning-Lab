@@ -55,16 +55,16 @@
     ],
     "budget_10_comparison": {
       "Submodular Greedy (Ours)": {
-        "log_det": -157.819,
-        "min_energy": 730.761
+        "log_det": -157.82,
+        "min_energy": 730.764
       },
       "Out-Degree Hubs": {
         "log_det": -178.652,
-        "min_energy": 2173.55
+        "min_energy": 2173.551
       },
       "PageRank": {
         "log_det": -181.64,
-        "min_energy": 2408.997
+        "min_energy": 2409.0
       },
       "Betweenness": {
         "log_det": -189.528,
@@ -72,7 +72,7 @@
       },
       "Random": {
         "log_det": -187.738,
-        "min_energy": 2413.455
+        "min_energy": 2413.457
       }
     }
   },
@@ -89,47 +89,59 @@
       13,
       18
     ],
-    "training_initial_loss": 1276.0294,
-    "training_final_loss": 694.312,
+    "training_initial_loss": 1231.954,
+    "training_final_loss": 684.332,
+    "unseen_initial_states_eval": {
+      "n_unseen_trials": 10,
+      "lqr_mean_ise": 172.1713,
+      "gnn_mean_ise": 165.7384,
+      "lqr_mean_total_J": 742.7124,
+      "gnn_mean_total_J": 634.6163
+    },
     "comparison": [
       {
         "strategy": "Uncontrolled Cascade",
-        "ise_state": 501.2965,
+        "ise_state": 495.3876,
         "control_energy": 0.0,
-        "total_cost_J": 1503.8896,
+        "running_cost_J": 1486.1629,
+        "total_cost_J": 2927.5977,
         "terminal_norm": 10.9599,
         "settling_time_s": 4.0
       },
       {
         "strategy": "Random Pinning + Linear Feedback",
-        "ise_state": 328.295,
-        "control_energy": 65.1531,
-        "total_cost_J": 990.0973,
+        "ise_state": 323.6251,
+        "control_energy": 61.8788,
+        "running_cost_J": 975.8257,
+        "total_cost_J": 1822.5342,
         "terminal_norm": 8.3999,
         "settling_time_s": 4.0
       },
       {
         "strategy": "Submodular Pinning + Linear Feedback",
-        "ise_state": 257.7301,
-        "control_energy": 38.4863,
-        "total_cost_J": 776.2691,
+        "ise_state": 253.8185,
+        "control_energy": 35.356,
+        "running_cost_J": 764.284,
+        "total_cost_J": 1247.0006,
         "terminal_norm": 6.3424,
         "settling_time_s": 4.0
       },
       {
         "strategy": "Submodular Pinning + Algebraic Riccati LQR",
-        "ise_state": 190.3935,
-        "control_energy": 125.3466,
-        "total_cost_J": 581.2083,
-        "terminal_norm": 4.411,
+        "ise_state": 185.1256,
+        "control_energy": 127.209,
+        "running_cost_J": 565.5534,
+        "total_cost_J": 794.0016,
+        "terminal_norm": 4.3632,
         "settling_time_s": 4.0
       },
       {
         "strategy": "Submodular Pinning + Graph Neural Controller (Ours)",
-        "ise_state": 182.9696,
-        "control_energy": 233.3586,
-        "total_cost_J": 567.5774,
-        "terminal_norm": 3.2573,
+        "ise_state": 178.7584,
+        "control_energy": 217.4557,
+        "running_cost_J": 553.6717,
+        "total_cost_J": 684.3321,
+        "terminal_norm": 3.2998,
         "settling_time_s": 4.0
       }
     ]

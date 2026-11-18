@@ -120,20 +120,26 @@ def reaction_cascade_network(n: int = 40, branch_factor: float = 2.6, seed: int 
     return G
 
 
-def build_continuous_system_matrix(G: nx.DiGraph, damping: float = 1.25, coupling: float = 0.35) -> np.ndarray:
+def build_continuous_system_matrix(
+    G: nx.DiGraph,
+    damping: float = 1.25,
+    coupling: float = 0.35,
+    laplacian_weight: float = 0.5,
+) -> np.ndarray:
     """
     Construct a continuous-time linear state dynamics matrix A in dx/dt = A x + B u
     from a directed weighted network G=(V, E).
 
-    Here A_{ij} = coupling * w_{j->i} (incoming influence from j to i),
-    and diagonal entries A_{ii} = -(damping + sum_j A_{ij}) ensure dissipative stability
-    when unforced, matching physical diffusive/kinetic network transport.
+    Here off-diagonal entries are A_{ij} = coupling * w_{j->i} (incoming influence from j to i),
+    and diagonal entries A_{ii} = -(damping + laplacian_weight * sum_{j != i} A_{ij}) model
+    intrinsic nodal decay plus incoming diffusive/kinetic transport dissipation.
     """
     n = G.number_of_nodes()
     nodes = list(range(n))
     W_adj = nx.to_numpy_array(G, nodelist=nodes, weight="weight")
     # W_adj[j, i] is weight of edge j -> i, so A = coupling * W_adj.T
     A = coupling * W_adj.T.copy()
+    np.fill_diagonal(A, 0.0)
     in_strength = A.sum(axis=1)
-    np.fill_diagonal(A, -(damping + 0.5 * in_strength))
+    np.fill_diagonal(A, -(damping + laplacian_weight * in_strength))
     return A
