@@ -357,23 +357,34 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
         "pbh_rank_shared": verify_pbh_input_placement(cycles, cycle_layout.shared_input_sites)[1],
     }
 
-    fig, axes = plt.subplots(
-        1, 2, figsize=(13.4, 6.2), gridspec_kw={"width_ratios": [1.58, 1.0]}
+    fig = plt.figure(figsize=(14.0, 8.2))
+    gs_top = fig.add_gridspec(
+        2,
+        2,
+        height_ratios=[2.18, 1.0],
+        width_ratios=[1.56, 1.0],
+        hspace=0.34,
+        wspace=0.20,
     )
+    ax = fig.add_subplot(gs_top[0, 0])
+    ax2 = fig.add_subplot(gs_top[0, 1])
 
     # Panel (a): Hierarchical layout of Reaction Cascade Network
-    ax = axes[0]
     pos = {}
     tiers = {"precursor": [], "intermediate": [], "byproduct": []}
     for u, data in G.nodes(data=True):
         tiers[data.get("tier", "intermediate")].append(u)
 
-    y_map = {"precursor": 2.0, "intermediate": 1.0, "byproduct": 0.0}
+    y_map = {"precursor": 2.15, "intermediate": 1.05, "byproduct": -0.05}
     rng = np.random.default_rng(42)
     for tier_name, node_list in tiers.items():
         xs = np.linspace(0.0, 10.0, len(node_list))
         for idx, u in enumerate(node_list):
-            jitter_y = rng.uniform(-0.18, 0.18)
+            if tier_name == "intermediate":
+                alt = 0.24 if idx % 2 == 0 else -0.24
+                jitter_y = alt + rng.uniform(-0.04, 0.04)
+            else:
+                jitter_y = rng.uniform(-0.10, 0.10)
             pos[u] = np.array([xs[idx], y_map[tier_name] + jitter_y])
 
     driver_set = set(sc_res.driver_nodes)
@@ -506,7 +517,6 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
     )
 
     # Panel (b): Edge Classification & Topology Summary Comparison
-    ax2 = axes[1]
     topo_names = [
         "Reaction\nCascade",
         "Scale-Free\n($\\gamma = 2.3$)",
@@ -586,18 +596,106 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
         fancybox=False,
     )
 
-    fig.tight_layout(pad=1.15, rect=(0, 0.14, 1, 1))
-    fig.text(0.50, 0.115, "(c) Two disconnected cycles: where the input is wired", ha="center", fontsize=11)
-    checks = [
-        ("One signal at node 0", "pbh_rank_one_site"),
-        ("Separate signals at nodes 0 and 2", "pbh_rank_dedicated"),
-        ("One shared signal at nodes 0 and 2", "pbh_rank_shared"),
+    # Panel (c): Actual schematic diagrams of the two disconnected 2-cycles under 3 input wirings!
+    gs_bot = gs_top[1, :].subgridspec(1, 3, wspace=0.18)
+    cycle_specs = [
+        (
+            "(c1) 1 Signal at Node 0 Only",
+            "pbh_rank_one_site",
+            PALETTE_JOURNAL["crimson"],
+            [("u1", "$u_1$", (-0.52, 0.55), 0)],
+        ),
+        (
+            "(c2) 2 Dedicated Signals (Nodes 0, 2)",
+            "pbh_rank_dedicated",
+            PALETTE_JOURNAL["emerald"],
+            [("u1", "$u_1$", (-0.52, 0.55), 0), ("u2", "$u_2$", (0.48, 0.55), 2)],
+        ),
+        (
+            "(c3) 1 Shared Signal Split to Nodes 0 & 2",
+            "pbh_rank_shared",
+            PALETTE_JOURNAL["navy"],
+            [("u1", "$u_1$", (0.0, 0.88), 0), ("u1", "$u_1$", (0.0, 0.88), 2)],
+        ),
     ]
-    for x, (label, rank_key) in zip((0.17, 0.50, 0.83), checks):
-        rank = disjoint_cycles_control[rank_key]
-        fig.text(x, 0.065, f"{label}\nMinimum PBH rank {rank}/{len(cycles)}", ha="center", va="center", fontsize=9.4)
-    _finalize_journal_figure(fig, categorical_axes=(ax2,), topology_axes=(ax,))
-    fig.savefig(assets_dir / "network_control_topology.png")
+    c_axes = []
+    node_xy = {0: (-0.52, 0.08), 1: (-0.12, 0.08), 2: (0.12, 0.08), 3: (0.52, 0.08)}
+    for idx_c, (c_title, rank_key, accent_col, u_wires) in enumerate(cycle_specs):
+        ax_c = fig.add_subplot(gs_bot[0, idx_c])
+        c_axes.append(ax_c)
+        # Draw bidirectional cycle edges 0 <-> 1 and 2 <-> 3
+        for u_n, v_n, rad in [(0, 1, 0.28), (1, 0, 0.28), (2, 3, 0.28), (3, 2, 0.28)]:
+            ax_c.annotate(
+                "",
+                xy=node_xy[v_n],
+                xytext=node_xy[u_n],
+                arrowprops={
+                    "arrowstyle": "-|>",
+                    "connectionstyle": f"arc3,rad={rad}",
+                    "color": "#334155",
+                    "lw": 1.45,
+                    "shrinkA": 12,
+                    "shrinkB": 12,
+                },
+            )
+        # Draw state nodes 0, 1, 2, 3
+        touched = {dst for _, _, _, dst in u_wires}
+        for nid, (nx_p, ny_p) in node_xy.items():
+            fc = "#FDEBD0" if nid in touched else "#E2E8F0"
+            ec = PALETTE_JOURNAL["ochre"] if nid in touched else "#334155"
+            ax_c.scatter([nx_p], [ny_p], s=320, facecolor=fc, edgecolor=ec, linewidth=1.7, zorder=4)
+            ax_c.text(nx_p, ny_p, str(nid), ha="center", va="center", fontsize=9.2, zorder=5)
+
+        # Draw control signal source(s) and wiring arrows
+        drawn_u = set()
+        for uid, ulbl, (ux, uy), dst_n in u_wires:
+            if uid not in drawn_u:
+                ax_c.text(
+                    ux,
+                    uy,
+                    ulbl,
+                    ha="center",
+                    va="center",
+                    fontsize=9.2,
+                    color="#FFFFFF",
+                    bbox={"boxstyle": "square,pad=0.22", "fc": accent_col, "ec": "#111111", "lw": 1.1},
+                    zorder=6,
+                )
+                drawn_u.add(uid)
+            ax_c.annotate(
+                "",
+                xy=node_xy[dst_n],
+                xytext=(ux, uy),
+                arrowprops={
+                    "arrowstyle": "-|>",
+                    "color": accent_col,
+                    "lw": 1.85,
+                    "ls": "--" if len(u_wires) == 2 and len(drawn_u) == 1 else "-",
+                    "shrinkA": 11,
+                    "shrinkB": 12,
+                },
+                zorder=5,
+            )
+
+        rk = disjoint_cycles_control[rank_key]
+        status_str = "Full PBH Rank" if rk == len(cycles) else "Rank Deficient"
+        ax_c.text(
+            0.0,
+            -0.44,
+            f"PBH Minimum Rank = {rk}/{len(cycles)} ({status_str})",
+            ha="center",
+            va="center",
+            fontsize=8.8,
+            color=accent_col,
+        )
+        ax_c.set_xlim(-0.78, 0.78)
+        ax_c.set_ylim(-0.62, 1.12)
+        ax_c.set_xticks([])
+        ax_c.set_yticks([])
+        ax_c.set_title(c_title, fontsize=9.8, pad=5)
+
+    _finalize_journal_figure(fig, categorical_axes=(ax2,), topology_axes=(ax, *c_axes))
+    fig.savefig(assets_dir / "network_control_topology.png", bbox_inches="tight")
     plt.close(fig)
 
     return {
@@ -757,24 +855,196 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
                           negative_trajectories=sum(v < -1e-6 for v in negatives))
             stats[split][method] = values
 
-    methods = ("care", "finite_lqr", "local_linear", "full_linear", "self_only", "gnn")
+    # Recompute held-out state-norm trajectories from the saved exact weights for Panel (a)
+    from scripts.neural_pinning_comparison import (
+        CAP,
+        QF,
+        Q as Q_PIN,
+        R as R_PIN,
+        SEED as PIN_SEED,
+        STEPS as PIN_STEPS,
+        T as PIN_T,
+        _model_set,
+        finite_horizon_gains,
+        set_or_train_weights,
+    )
+    from netcontrol.neural_pinning import rollout_pinning_torch
+    from netcontrol import solve_lqr_controller
+    import torch
+
+    g28 = reaction_cascade_network(n=28, branch_factor=2.3, seed=PIN_SEED)
+    A28 = build_continuous_system_matrix(g28, damping=0.55, coupling=0.36)
+    A28_t = torch.tensor(A28, dtype=torch.float32)
+    drv28 = sorted(v for v in g28 if g28.in_degree(v) == 0)
+    pins28, _ = select_actuators_submodular(A28, budget_k=8, horizon=2.5, mandatory_nodes=drv28[:4])
+    B28 = build_input_matrix(len(g28), pins28)
+    K28_np, _ = solve_lqr_controller(A28, B28, q_weight=Q_PIN, r_weight=R_PIN)
+    K28_t = torch.tensor(K28_np, dtype=torch.float32)
+    models28 = _model_set(g28, drv28, pins28, K28_t)
+    set_or_train_weights(models28, A28_t, pins28, torch.zeros((1, 28)), results_dir, replay=True)
+    x80_t = torch.tensor([r["x0"] for r in splits["additional_80"]], dtype=torch.float32)
+
+    def _b_ctrl(raw_u: torch.Tensor) -> torch.Tensor:
+        return CAP * torch.tanh(raw_u / CAP)
+
+    traj_policies = [
+        ("uncontrolled", "Uncontrolled", lambda x: torch.zeros(x.shape[0], len(pins28)), PALETTE_JOURNAL["slate"], ":"),
+        ("self_only", "Self-only neural (0-hop)", models28["self_only"], PALETTE_JOURNAL["plum"], "--"),
+        ("care", "CARE LQR (global linear)", lambda x: _b_ctrl(-x @ K28_t.T), PALETTE_JOURNAL["ochre"], "-."),
+        ("local_linear", "Trained 1-hop linear", models28["local_linear"], PALETTE_JOURNAL["navy"], "--"),
+        ("gnn", "1-hop GNN (local nonlinear)", models28["gnn"], PALETTE_JOURNAL["emerald"], "-"),
+        ("full_linear", "Full-state linear (oracle)", models28["full_linear"], PALETTE_JOURNAL["crimson"], "-"),
+    ]
+    traj_curves = {}
+    with torch.no_grad():
+        for m_key, m_lbl, ctrl_fn, col, ls in traj_policies:
+            ts_t, xs_t, _ = rollout_pinning_torch(A28_t, x80_t, pins28, ctrl_fn, PIN_T, PIN_STEPS)
+            norms = np.linalg.norm(xs_t.numpy(), axis=2)  # (T+1, 80)
+            traj_curves[m_key] = (
+                ts_t.numpy(),
+                np.mean(norms, axis=1),
+                np.percentile(norms, 25, axis=1),
+                np.percentile(norms, 75, axis=1),
+                m_lbl,
+                col,
+                ls,
+            )
+
+    methods = ("self_only", "care", "finite_lqr", "local_linear", "gnn", "full_linear")
+    short_labels = {
+        "self_only": "Self-only neural\n(0-hop local)",
+        "care": "CARE LQR\n(all-to-all)",
+        "finite_lqr": "Finite-horizon LQR\n(all-to-all)",
+        "local_linear": "Trained 1-hop linear\n(1-hop local)",
+        "gnn": "1-hop GNN\n(1-hop local)",
+        "full_linear": "Trained full-state\n(all-to-all oracle)",
+    }
+
+    fig, (ax_tr, ax_j, ax_pe) = plt.subplots(
+        1, 3, figsize=(16.2, 5.2), gridspec_kw={"width_ratios": [1.14, 1.14, 1.04]}
+    )
+
+    # Panel (a): State norm ||x(t)||_2 trajectories (mean + IQR across 80 held-out states)
+    for m_key, *_ in traj_policies:
+        t_arr, mu_n, q25_n, q75_n, m_lbl, col, ls = traj_curves[m_key]
+        lw = 2.35 if m_key in ("gnn", "local_linear") else 1.75
+        ax_tr.plot(t_arr, mu_n, color=col, linestyle=ls, linewidth=lw, label=m_lbl, zorder=4 if m_key == "gnn" else 3)
+        if m_key in ("gnn", "local_linear", "care", "self_only"):
+            ax_tr.fill_between(t_arr, q25_n, q75_n, color=col, alpha=0.11, zorder=2)
+    ax_tr.set_xlim(0.0, 4.0)
+    ax_tr.set_ylim(2.7, 11.7)
+    ax_tr.set_xlabel("Time $t$ (s)")
+    ax_tr.set_ylabel("State Euclidean Norm $||x(t)||_2$")
+    ax_tr.set_title("(a) Closed-Loop Trajectories (80 Held-Out States)", pad=8)
+    ax_tr.legend(loc="center right", bbox_to_anchor=(0.985, 0.64), fontsize=7.6, frameon=True, fancybox=False)
+
+    # Panel (b): Total Cost J distribution across Original 10 + Holdout 80 initial states
     y = np.arange(len(methods))
-    fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.35), sharey=True)
-    for ax, field, caption in zip(axes, ("total_j", "applied_input_energy"),
-                                  ("(a) Mean total cost $J$", "(b) Mean applied input energy")):
-        for shift, split, label, marker, color in [
-            (-0.13, "original_10", "Original 10 initial states", "o", PALETTE_JOURNAL["navy"]),
-            (0.13, "additional_80", "Additional 80 initial states", "D", PALETTE_JOURNAL["ochre"]),
-        ]:
-            means = [stats[split][m][field] for m in methods]
-            ax.scatter(means, y + shift, marker=marker, color=color, s=36, label=label, zorder=3)
-        ax.set_yticks(y, [LABELS[m] for m in methods])
-        ax.set_xlabel(caption)
-        ax.set_ylim(len(methods) - 0.5, -0.5)
-    axes[0].legend(loc="lower center", bbox_to_anchor=(0.93, 1.04), ncol=2, frameon=False)
-    fig.subplots_adjust(left=0.19, right=0.98, bottom=0.18, top=0.84, wspace=0.08)
-    _finalize_journal_figure(fig)
-    fig.savefig(assets_dir / "neural_pinning_trajectories.png")
+    j80_by_m = [[r["scores"][m]["total_j"] for r in splits["additional_80"]] for m in methods]
+    bp = ax_j.boxplot(
+        j80_by_m,
+        positions=y,
+        vert=False,
+        widths=0.46,
+        patch_artist=True,
+        showfliers=False,
+        medianprops={"color": "#111111", "linewidth": 1.6},
+        whiskerprops={"color": "#334155", "linewidth": 1.15},
+        capprops={"color": "#334155", "linewidth": 1.15},
+    )
+    is_local = {"self_only": True, "local_linear": True, "gnn": True, "care": False, "finite_lqr": False, "full_linear": False}
+    for patch, m in zip(bp["boxes"], methods):
+        patch.set_facecolor("#D1FAE5" if is_local[m] else "#DBEAFE")
+        patch.set_edgecolor("#065F46" if is_local[m] else "#1E40AF")
+        patch.set_linewidth(1.2)
+        patch.set_alpha(0.85)
+
+    ax_j.scatter(
+        [stats["original_10"][m]["total_j"] for m in methods],
+        y - 0.14,
+        marker="o",
+        color=PALETTE_JOURNAL["navy"],
+        edgecolor="#FFFFFF",
+        linewidth=0.7,
+        s=46,
+        label="Mean (Original 10 states)",
+        zorder=5,
+    )
+    ax_j.scatter(
+        [stats["additional_80"][m]["total_j"] for m in methods],
+        y + 0.14,
+        marker="D",
+        color=PALETTE_JOURNAL["crimson"],
+        edgecolor="#FFFFFF",
+        linewidth=0.7,
+        s=46,
+        label="Mean (Holdout 80 states)",
+        zorder=5,
+    )
+    ax_j.set_yticks(y, [short_labels[m] for m in methods])
+    ax_j.set_ylim(len(methods) - 0.45, -0.55)
+    ax_j.set_xlabel("Closed-Loop Total Cost $J$ (Lower is Better)")
+    ax_j.set_title("(b) Held-Out Cost Distribution (Green: Local, Blue: Global)", pad=8)
+    ax_j.legend(loc="lower right", fontsize=8.0, frameon=True, fancybox=False)
+
+    # Panel (c): Mean Cost J vs Applied Input Energy (Holdout 80 states) with Local vs Global grouping
+    offsets_pe = {
+        "care": (-16, 28),
+        "finite_lqr": (10, 22),
+        "local_linear": (-76, 30),
+        "full_linear": (-92, -30),
+        "self_only": (-92, -16),
+        "gnn": (-42, 34),
+    }
+    for loc_flag, grp_lbl, mk, col in [
+        (True, "Local Observation (0/1-Hop)", "s", PALETTE_JOURNAL["emerald"]),
+        (False, "Global Observation (All 28 States)", "^", PALETTE_JOURNAL["navy"]),
+    ]:
+        sub_ms = [m for m in methods if is_local[m] == loc_flag]
+        xs_e = [stats["additional_80"][m]["applied_input_energy"] for m in sub_ms]
+        ys_j = [stats["additional_80"][m]["total_j"] for m in sub_ms]
+        es_sd = [np.std([r["scores"][m]["applied_input_energy"] for r in splits["additional_80"]]) for m in sub_ms]
+        js_sd = [np.std([r["scores"][m]["total_j"] for r in splits["additional_80"]]) for m in sub_ms]
+        ax_pe.errorbar(
+            xs_e,
+            ys_j,
+            xerr=es_sd,
+            yerr=js_sd,
+            fmt=mk,
+            color=col,
+            ecolor=col,
+            elinewidth=1.1,
+            capsize=3.0,
+            markersize=7.5,
+            markeredgecolor="#111111",
+            markeredgewidth=0.9,
+            alpha=0.92,
+            label=grp_lbl,
+            zorder=4,
+        )
+        for m in sub_ms:
+            ex = stats["additional_80"][m]["applied_input_energy"]
+            jy = stats["additional_80"][m]["total_j"]
+            dx, dy = offsets_pe[m]
+            ax_pe.annotate(
+                LABELS[m],
+                xy=(ex, jy),
+                xytext=(dx, dy),
+                textcoords="offset points",
+                fontsize=7.9,
+                color="#111111",
+                arrowprops={"arrowstyle": "-", "color": "#64748B", "lw": 0.8},
+            )
+    ax_pe.set_xlim(118, 250)
+    ax_pe.set_ylim(565, 1345)
+    ax_pe.set_xlabel(r"Mean Applied Input Energy $E_{\mathrm{applied}}$")
+    ax_pe.set_ylabel("Mean Closed-Loop Cost $J$ (80 States)")
+    ax_pe.set_title("(c) Cost vs. Energy by Observation Scope", pad=8)
+    ax_pe.legend(loc="upper left", fontsize=8.0, frameon=True, fancybox=False)
+
+    fig.tight_layout(pad=1.05)
+    _finalize_journal_figure(fig, categorical_axes=(ax_j,))
+    fig.savefig(assets_dir / "neural_pinning_trajectories.png", bbox_inches="tight")
     plt.close(fig)
 
     primary = stats["original_10"]
