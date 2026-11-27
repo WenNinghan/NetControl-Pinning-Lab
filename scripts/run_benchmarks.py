@@ -1,6 +1,6 @@
 """Reproduce four experiments on synthetic directed networks.
 
-The figures and machine-readable records cover structural input wiring,
+The WRM print-native figures and machine-readable records cover structural input wiring,
 finite-horizon actuator selection, and bounded feedback on held-out initial states.
 """
 
@@ -8,15 +8,14 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterable, Tuple
+from typing import Tuple
 
 import matplotlib
 matplotlib.use("Agg")
-from matplotlib.lines import Line2D
-import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
@@ -34,196 +33,25 @@ from netcontrol import (
     scale_free_directed,
     select_actuators_baseline,
     select_actuators_submodular,
-    small_world_directed,
     verify_pbh_controllability,
     verify_pbh_input_placement,
 )
+from netcontrol.editorial_style import apply_editorial_rc
 from netcontrol.gramian_lqr import build_input_matrix
 
+from scripts.compute_holdout_inference import compute_holdout_inference
+from scripts.generate_figures import (
+    build_actuator_submodular_figure,
+    build_driver_scaling_figure,
+    build_network_topology_figure,
+    build_neural_pinning_figure,
+)
 from scripts.neural_pinning_comparison import LABELS, RECORDS, WEIGHTS, evaluate_feedback, mean_metric
-
-# High-contrast academic journal palette (IEEE TAC / Nature Physics)
-PALETTE_JOURNAL = {
-    "navy": "#1B4F72",
-    "emerald": "#0B6E4F",
-    "crimson": "#B03A2E",
-    "ochre": "#C55A11",
-    "plum": "#5B2C6F",
-    "slate": "#5D6D7E",
-    "teal": "#117864",
-    "gold": "#7D6608",
-    "charcoal": "#111111",
-}
 
 
 def configure_mpl_style() -> None:
-    """Configure global Matplotlib rcParams for 300-DPI IEEE TAC / Automatica figures."""
-    plt.rcParams.update(
-        {
-            "font.family": "serif",
-            "font.serif": ["Times New Roman", "STIXGeneral", "DejaVu Serif"],
-            "font.weight": "bold",
-            "axes.labelweight": "bold",
-            "axes.titleweight": "bold",
-            "mathtext.fontset": "stix",
-            "axes.unicode_minus": False,
-            "font.size": 10.5,
-            "axes.titlesize": 11.4,
-            "axes.labelsize": 10.6,
-            "xtick.labelsize": 9.6,
-            "ytick.labelsize": 9.6,
-            "legend.fontsize": 8.5,
-            "figure.facecolor": "#FFFFFF",
-            "axes.facecolor": "#FFFFFF",
-            "savefig.facecolor": "#FFFFFF",
-            "axes.edgecolor": "#111111",
-            "axes.linewidth": 1.30,
-            "axes.spines.top": True,
-            "axes.spines.right": True,
-            "axes.spines.bottom": True,
-            "axes.spines.left": True,
-            "xtick.direction": "in",
-            "ytick.direction": "in",
-            "xtick.top": True,
-            "ytick.right": True,
-            "xtick.major.size": 4.5,
-            "ytick.major.size": 4.5,
-            "xtick.major.width": 1.2,
-            "ytick.major.width": 1.2,
-            "xtick.minor.size": 2.4,
-            "ytick.minor.size": 2.4,
-            "xtick.minor.width": 0.9,
-            "ytick.minor.width": 0.9,
-            "xtick.color": "#111111",
-            "ytick.color": "#111111",
-            "axes.grid": True,
-            "grid.linestyle": ":",
-            "grid.linewidth": 0.7,
-            "grid.alpha": 0.35,
-            "grid.color": "#94A3B8",
-            "legend.fancybox": False,
-            "legend.edgecolor": "#111111",
-            "legend.facecolor": "#FFFFFF",
-            "legend.framealpha": 0.96,
-            "figure.dpi": 300,
-            "savefig.dpi": 300,
-            "savefig.bbox": "tight",
-            "savefig.pad_inches": 0.08,
-        }
-    )
-
-
-def _finalize_journal_figure(
-    fig: plt.Figure,
-    categorical_axes: Iterable[plt.Axes] = (),
-    topology_axes: Iterable[plt.Axes] = (),
-) -> None:
-    """Enforce Times New Roman bold typography, 4-sided frames, and tick geometry across all axes."""
-    cat_set = set(categorical_axes)
-    topo_set = set(topology_axes)
-
-    fig.patch.set_facecolor("#FFFFFF")
-    fig.canvas.draw()
-
-    for ax in fig.axes:
-        ax.set_facecolor("#FFFFFF")
-        ax.set_axisbelow(True)
-
-        spine_lw = 1.20 if ax in topo_set else 1.30
-        for spine in ax.spines.values():
-            spine.set_visible(True)
-            spine.set_edgecolor("#111111")
-            spine.set_linewidth(spine_lw)
-
-        if ax in topo_set:
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.grid(False)
-        elif ax in cat_set:
-            ax.tick_params(
-                axis="y",
-                which="major",
-                direction="in",
-                left=True,
-                right=True,
-                length=4.5,
-                width=1.2,
-                colors="#111111",
-            )
-            ax.tick_params(
-                axis="y",
-                which="minor",
-                direction="in",
-                left=True,
-                right=True,
-                length=2.4,
-                width=0.9,
-                colors="#111111",
-            )
-            ax.tick_params(
-                axis="x",
-                which="both",
-                direction="out",
-                bottom=True,
-                top=False,
-                length=4.0,
-                width=1.2,
-                colors="#111111",
-            )
-            ax.grid(True, axis="y", linestyle=":", linewidth=0.7, alpha=0.35, color="#94A3B8")
-            ax.grid(False, axis="x")
-        else:
-            ax.tick_params(
-                axis="both",
-                which="major",
-                direction="in",
-                top=True,
-                right=True,
-                bottom=True,
-                left=True,
-                length=4.5,
-                width=1.2,
-                colors="#111111",
-            )
-            ax.tick_params(
-                axis="both",
-                which="minor",
-                direction="in",
-                top=True,
-                right=True,
-                bottom=True,
-                left=True,
-                length=2.4,
-                width=0.9,
-                colors="#111111",
-            )
-            ax.grid(True, linestyle=":", linewidth=0.7, alpha=0.35, color="#94A3B8")
-
-        for lbl in ax.get_xticklabels() + ax.get_yticklabels():
-            lbl.set_fontfamily("Times New Roman")
-            lbl.set_fontweight("bold")
-
-        for item in (ax.title, ax.xaxis.label, ax.yaxis.label):
-            item.set_fontfamily("Times New Roman")
-            item.set_fontweight("bold")
-
-        for txt in ax.texts:
-            txt.set_fontfamily("Times New Roman")
-            txt.set_fontweight("bold")
-
-        leg = ax.get_legend()
-        if leg is not None:
-            for ltxt in leg.get_texts():
-                ltxt.set_fontfamily("Times New Roman")
-                ltxt.set_fontweight("bold")
-            if leg.get_title() is not None:
-                leg.get_title().set_fontfamily("Times New Roman")
-                leg.get_title().set_fontweight("bold")
-            frame = leg.get_frame()
-            frame.set_linewidth(1.1)
-            frame.set_edgecolor("#111111")
-            frame.set_facecolor("#FFFFFF")
-            frame.set_alpha(0.96)
+    """Apply shared WRM print-native editorial Matplotlib rcParams."""
+    apply_editorial_rc()
 
 
 def run_scaling_law_experiment(assets_dir: Path) -> dict:
@@ -231,8 +59,11 @@ def run_scaling_law_experiment(assets_dir: Path) -> dict:
     k_values = [1.0, 1.5, 2.0, 3.0, 4.0, 5.5, 7.0, 9.0]
     n_nodes = 120
     n_trials = 5
-    families = ["Scale-Free (γ=2.2, Heterogeneous)", "Scale-Free (γ=2.8, Moderate)",
-                "Erdős–Rényi (Random)"]
+    families = [
+        "Scale-Free (γ=2.2, Heterogeneous)",
+        "Scale-Free (γ=2.8, Moderate)",
+        "Erdős–Rényi (Random)",
+    ]
     reference = "Reference: exp(-<k>/2)"
     curves = {key: [] for key in [*families, reference]}
     trials = []
@@ -249,7 +80,9 @@ def run_scaling_law_experiment(assets_dir: Path) -> dict:
                 result = analyze_structural_controllability(graph)
                 summaries[family].append(result.minimum_input_channels / n_nodes)
                 trials.append({
-                    "family": family, "target_mean_out_degree": k, "seed": graph_seed,
+                    "family": family,
+                    "target_mean_out_degree": k,
+                    "seed": graph_seed,
                     "n_edges": graph.number_of_edges(),
                     "minimum_input_channels": result.minimum_input_channels,
                     "minimum_dedicated_sites": result.n_drivers,
@@ -258,72 +91,7 @@ def run_scaling_law_experiment(assets_dir: Path) -> dict:
             curves[family].append((float(np.mean(values)), float(np.std(values))))
         curves[reference].append((float(np.exp(-0.5 * k)), 0.0))
 
-    fig, ax = plt.subplots(figsize=(8.4, 5.2))
-    palette = {
-        "Scale-Free (γ=2.2, Heterogeneous)": (
-            PALETTE_JOURNAL["crimson"],
-            "o",
-            "-",
-            "Scale-Free ($\\gamma = 2.2$, Heterogeneous)",
-        ),
-        "Scale-Free (γ=2.8, Moderate)": (
-            PALETTE_JOURNAL["plum"],
-            "s",
-            "-",
-            "Scale-Free ($\\gamma = 2.8$, Moderate)",
-        ),
-        "Erdős–Rényi (Random)": (
-            PALETTE_JOURNAL["emerald"],
-            "^",
-            "-",
-            "Erdős–Rényi (Random)",
-        ),
-        reference: (
-            PALETTE_JOURNAL["charcoal"],
-            None,
-            "--",
-            "Reference $\\exp(-\\langle k \\rangle / 2)$",
-        ),
-    }
-
-    for key, stats in curves.items():
-        means = np.array([m for m, _ in stats])
-        stds = np.array([s for _, s in stats])
-        color, marker, ls, disp_label = palette[key]
-        ax.plot(
-            k_values,
-            means,
-            label=disp_label,
-            color=color,
-            marker=marker,
-            linestyle=ls,
-            linewidth=2.3,
-            markersize=6.2,
-            markeredgecolor="#111111",
-            markeredgewidth=0.6,
-        )
-        if np.any(stds > 0):
-            ax.fill_between(
-                k_values,
-                np.maximum(0.0, means - stds),
-                np.minimum(1.0, means + stds),
-                color=color,
-                alpha=0.14,
-            )
-
-    ax.set_xlabel("Target Mean Out-Degree $\\langle k \\rangle$")
-    ax.set_ylabel("Minimum independent inputs / number of states")
-    ax.set_title("Finite-network comparison (120 states; 5 graphs per point)", pad=8)
-    ax.set_xlim(0.65, 9.35)
-    ax.set_ylim(-0.02, 0.74)
-    ax.legend(loc="upper right", frameon=True, fancybox=False, fontsize=9.0)
-
-    fig.tight_layout(pad=1.10)
-    _finalize_journal_figure(fig)
-    fig.savefig(assets_dir / "driver_scaling_law.png")
-    plt.close(fig)
-
-    return {
+    exp1_summary = {
         "k_values": k_values,
         "n_nodes": n_nodes,
         "n_trials_per_family_per_degree": n_trials,
@@ -336,6 +104,15 @@ def run_scaling_law_experiment(assets_dir: Path) -> dict:
         "er_mean_nD": [round(m, 4) for m, _ in curves["Erdős–Rényi (Random)"]],
     }
 
+    inf_path = ROOT / "results" / "holdout_paired_inference.json"
+    inference = (
+        json.loads(inf_path.read_text(encoding="utf-8"))
+        if inf_path.exists()
+        else compute_holdout_inference(ROOT / "results")
+    )
+    build_driver_scaling_figure(exp1_summary, inference, assets_dir / "driver_scaling_law.png")
+    return exp1_summary
+
 
 def run_topology_and_link_classification(assets_dir: Path) -> dict:
     """Experiment 2: Reaction cascade structural controllability, PBH verification, and edge criticality."""
@@ -344,7 +121,6 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
     edge_classes = classify_control_edges(G)
     pbh_ok, pbh_rank = verify_pbh_controllability(G, sc_res.driver_nodes, seed=42)
 
-    # Two disconnected cyclic subsystems distinguish input channels from physical sites.
     cycles = nx.DiGraph([(0, 1), (1, 0), (2, 3), (3, 2)])
     cycle_layout = analyze_structural_controllability(cycles)
     disjoint_cycles_control = {
@@ -357,348 +133,7 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
         "pbh_rank_shared": verify_pbh_input_placement(cycles, cycle_layout.shared_input_sites)[1],
     }
 
-    fig = plt.figure(figsize=(14.0, 8.2))
-    gs_top = fig.add_gridspec(
-        2,
-        2,
-        height_ratios=[2.18, 1.0],
-        width_ratios=[1.56, 1.0],
-        hspace=0.34,
-        wspace=0.20,
-    )
-    ax = fig.add_subplot(gs_top[0, 0])
-    ax2 = fig.add_subplot(gs_top[0, 1])
-
-    # Panel (a): Hierarchical layout of Reaction Cascade Network
-    pos = {}
-    tiers = {"precursor": [], "intermediate": [], "byproduct": []}
-    for u, data in G.nodes(data=True):
-        tiers[data.get("tier", "intermediate")].append(u)
-
-    y_map = {"precursor": 2.15, "intermediate": 1.05, "byproduct": -0.05}
-    rng = np.random.default_rng(42)
-    for tier_name, node_list in tiers.items():
-        xs = np.linspace(0.0, 10.0, len(node_list))
-        for idx, u in enumerate(node_list):
-            if tier_name == "intermediate":
-                alt = 0.24 if idx % 2 == 0 else -0.24
-                jitter_y = alt + rng.uniform(-0.04, 0.04)
-            else:
-                jitter_y = rng.uniform(-0.10, 0.10)
-            pos[u] = np.array([xs[idx], y_map[tier_name] + jitter_y])
-
-    driver_set = set(sc_res.driver_nodes)
-    other_nodes = [u for u in G.nodes() if u not in driver_set]
-
-    # Draw edges by criticality class
-    edge_colors = {
-        "critical": PALETTE_JOURNAL["crimson"],
-        "ordinary": PALETTE_JOURNAL["navy"],
-        "redundant": PALETTE_JOURNAL["slate"],
-    }
-    for cls_name, e_list in [
-        ("redundant", edge_classes["redundant"]),
-        ("ordinary", edge_classes["ordinary"]),
-        ("critical", edge_classes["critical"]),
-    ]:
-        if e_list:
-            nx.draw_networkx_edges(
-                G,
-                pos,
-                edgelist=e_list,
-                ax=ax,
-                edge_color=edge_colors[cls_name],
-                width=2.3 if cls_name == "critical" else (1.3 if cls_name == "ordinary" else 1.0),
-                style="solid" if cls_name != "redundant" else "dashed",
-                alpha=0.92 if cls_name == "critical" else (0.58 if cls_name == "ordinary" else 0.50),
-                arrows=True,
-                arrowsize=11,
-                node_size=280,
-            )
-
-    nx.draw_networkx_nodes(
-        G,
-        pos,
-        nodelist=other_nodes,
-        ax=ax,
-        node_color="#D4EFDF",
-        node_size=265,
-        edgecolors=PALETTE_JOURNAL["emerald"],
-        linewidths=1.8,
-    )
-    nx.draw_networkx_nodes(
-        G,
-        pos,
-        nodelist=sc_res.driver_nodes,
-        ax=ax,
-        node_color="#FDEBD0",
-        node_size=360,
-        node_shape="^",
-        edgecolors=PALETTE_JOURNAL["ochre"],
-        linewidths=2.0,
-    )
-    lbl_artists = nx.draw_networkx_labels(
-        G,
-        pos,
-        ax=ax,
-        font_size=7.8,
-        font_color="#111111",
-        font_family="Times New Roman",
-        font_weight="bold",
-    )
-    for txt_obj in lbl_artists.values():
-        txt_obj.set_fontfamily("Times New Roman")
-        txt_obj.set_fontweight("bold")
-
-    legend_handles = [
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="none",
-            markerfacecolor="#D4EFDF",
-            markeredgecolor=PALETTE_JOURNAL["emerald"],
-            markeredgewidth=1.7,
-            markersize=8.2,
-            label=f"Other nodes ({len(other_nodes)})",
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="^",
-            color="none",
-            markerfacecolor="#FDEBD0",
-            markeredgecolor=PALETTE_JOURNAL["ochre"],
-            markeredgewidth=1.8,
-            markersize=9.0,
-            label=f"Dedicated sites ({sc_res.n_drivers})",
-        ),
-        Line2D(
-            [0],
-            [0],
-            color=PALETTE_JOURNAL["crimson"],
-            linewidth=2.3,
-            linestyle="-",
-            label=f"Critical Links ({len(edge_classes['critical'])})",
-        ),
-        Line2D(
-            [0],
-            [0],
-            color=PALETTE_JOURNAL["navy"],
-            linewidth=1.5,
-            linestyle="-",
-            label=f"Ordinary Links ({len(edge_classes['ordinary'])})",
-        ),
-        Line2D(
-            [0],
-            [0],
-            color=PALETTE_JOURNAL["slate"],
-            linewidth=1.2,
-            linestyle="--",
-            label=f"Redundant Links ({len(edge_classes['redundant'])})",
-        ),
-    ]
-    ax.set_xlim(-0.85, 10.85)
-    ax.set_ylim(-0.52, 2.96)
-    ax.set_title(
-        f"(a) Synthetic cascade ($N = {sc_res.n_nodes}$, dedicated sites = {sc_res.n_drivers}, "
-        f"$\\mathrm{{rank}}_{{\\mathrm{{PBH}}}} = {pbh_rank}/{sc_res.n_nodes}$)",
-        pad=8,
-    )
-    ax.legend(
-        handles=legend_handles,
-        loc="upper center",
-        ncol=3,
-        fontsize=8.0,
-        columnspacing=0.9,
-        handletextpad=0.45,
-        frameon=True,
-        fancybox=False,
-    )
-
-    # Panel (b): Edge Classification & Topology Summary Comparison
-    topo_names = [
-        "Reaction\nCascade",
-        "Scale-Free\n($\\gamma = 2.3$)",
-        "Small-World\n(WS)",
-        "Erdős–Rényi\n(Random)",
-    ]
-    graphs = [
-        G,
-        scale_free_directed(32, mean_degree=2.8, gamma_exp=2.3, seed=42),
-        small_world_directed(32, k_out=2, p_rewire=0.25, seed=42),
-        erdos_renyi_directed(32, mean_degree=2.8, seed=42),
-    ]
-    crit_fracs, ord_fracs, red_fracs, nd_fracs = [], [], [], []
-    for g_item in graphs:
-        ec = classify_control_edges(g_item)
-        tot_e = max(1, g_item.number_of_edges())
-        crit_fracs.append(len(ec["critical"]) / tot_e)
-        ord_fracs.append(len(ec["ordinary"]) / tot_e)
-        red_fracs.append(len(ec["redundant"]) / tot_e)
-        nd_fracs.append(analyze_structural_controllability(g_item).driver_fraction)
-
-    x_idx = np.arange(len(topo_names))
-    w = 0.50
-    ax2.bar(
-        x_idx,
-        crit_fracs,
-        width=w,
-        color=PALETTE_JOURNAL["crimson"],
-        edgecolor="#111111",
-        linewidth=0.95,
-        label="Critical",
-    )
-    ax2.bar(
-        x_idx,
-        ord_fracs,
-        width=w,
-        bottom=crit_fracs,
-        color=PALETTE_JOURNAL["navy"],
-        edgecolor="#111111",
-        linewidth=0.95,
-        label="Ordinary",
-    )
-    ax2.bar(
-        x_idx,
-        red_fracs,
-        width=w,
-        bottom=np.array(crit_fracs) + np.array(ord_fracs),
-        color="#CBD5E1",
-        edgecolor="#111111",
-        linewidth=0.95,
-        hatch="//",
-        label="Redundant",
-    )
-    for idx, nd_val in enumerate(nd_fracs):
-        ax2.text(
-            idx,
-            1.025,
-            f"sites/N = {nd_val:.2f}",
-            ha="center",
-            va="bottom",
-            fontsize=8.6,
-            color=PALETTE_JOURNAL["crimson"],
-        )
-
-    ax2.set_xticks(x_idx)
-    ax2.set_xticklabels(topo_names, fontsize=9.0)
-    ax2.set_ylim(0.0, 1.28)
-    ax2.set_ylabel("Fraction of Directed Edges")
-    ax2.set_title("(b) Matching-based edge classification", pad=8)
-    ax2.legend(
-        loc="upper center",
-        ncol=3,
-        fontsize=8.0,
-        columnspacing=0.8,
-        handletextpad=0.4,
-        frameon=True,
-        fancybox=False,
-    )
-
-    # Panel (c): Actual schematic diagrams of the two disconnected 2-cycles under 3 input wirings!
-    gs_bot = gs_top[1, :].subgridspec(1, 3, wspace=0.18)
-    cycle_specs = [
-        (
-            "(c1) 1 Signal at Node 0 Only",
-            "pbh_rank_one_site",
-            PALETTE_JOURNAL["crimson"],
-            [("u1", "$u_1$", (-0.52, 0.55), 0)],
-        ),
-        (
-            "(c2) 2 Dedicated Signals (Nodes 0, 2)",
-            "pbh_rank_dedicated",
-            PALETTE_JOURNAL["emerald"],
-            [("u1", "$u_1$", (-0.52, 0.55), 0), ("u2", "$u_2$", (0.48, 0.55), 2)],
-        ),
-        (
-            "(c3) 1 Shared Signal Split to Nodes 0 & 2",
-            "pbh_rank_shared",
-            PALETTE_JOURNAL["navy"],
-            [("u1", "$u_1$", (0.0, 0.88), 0), ("u1", "$u_1$", (0.0, 0.88), 2)],
-        ),
-    ]
-    c_axes = []
-    node_xy = {0: (-0.52, 0.08), 1: (-0.12, 0.08), 2: (0.12, 0.08), 3: (0.52, 0.08)}
-    for idx_c, (c_title, rank_key, accent_col, u_wires) in enumerate(cycle_specs):
-        ax_c = fig.add_subplot(gs_bot[0, idx_c])
-        c_axes.append(ax_c)
-        # Draw bidirectional cycle edges 0 <-> 1 and 2 <-> 3
-        for u_n, v_n, rad in [(0, 1, 0.28), (1, 0, 0.28), (2, 3, 0.28), (3, 2, 0.28)]:
-            ax_c.annotate(
-                "",
-                xy=node_xy[v_n],
-                xytext=node_xy[u_n],
-                arrowprops={
-                    "arrowstyle": "-|>",
-                    "connectionstyle": f"arc3,rad={rad}",
-                    "color": "#334155",
-                    "lw": 1.45,
-                    "shrinkA": 12,
-                    "shrinkB": 12,
-                },
-            )
-        # Draw state nodes 0, 1, 2, 3
-        touched = {dst for _, _, _, dst in u_wires}
-        for nid, (nx_p, ny_p) in node_xy.items():
-            fc = "#FDEBD0" if nid in touched else "#E2E8F0"
-            ec = PALETTE_JOURNAL["ochre"] if nid in touched else "#334155"
-            ax_c.scatter([nx_p], [ny_p], s=320, facecolor=fc, edgecolor=ec, linewidth=1.7, zorder=4)
-            ax_c.text(nx_p, ny_p, str(nid), ha="center", va="center", fontsize=9.2, zorder=5)
-
-        # Draw control signal source(s) and wiring arrows
-        drawn_u = set()
-        for uid, ulbl, (ux, uy), dst_n in u_wires:
-            if uid not in drawn_u:
-                ax_c.text(
-                    ux,
-                    uy,
-                    ulbl,
-                    ha="center",
-                    va="center",
-                    fontsize=9.2,
-                    color="#FFFFFF",
-                    bbox={"boxstyle": "square,pad=0.22", "fc": accent_col, "ec": "#111111", "lw": 1.1},
-                    zorder=6,
-                )
-                drawn_u.add(uid)
-            ax_c.annotate(
-                "",
-                xy=node_xy[dst_n],
-                xytext=(ux, uy),
-                arrowprops={
-                    "arrowstyle": "-|>",
-                    "color": accent_col,
-                    "lw": 1.85,
-                    "ls": "--" if len(u_wires) == 2 and len(drawn_u) == 1 else "-",
-                    "shrinkA": 11,
-                    "shrinkB": 12,
-                },
-                zorder=5,
-            )
-
-        rk = disjoint_cycles_control[rank_key]
-        status_str = "Full PBH Rank" if rk == len(cycles) else "Rank Deficient"
-        ax_c.text(
-            0.0,
-            -0.44,
-            f"PBH Minimum Rank = {rk}/{len(cycles)} ({status_str})",
-            ha="center",
-            va="center",
-            fontsize=8.8,
-            color=accent_col,
-        )
-        ax_c.set_xlim(-0.78, 0.78)
-        ax_c.set_ylim(-0.62, 1.12)
-        ax_c.set_xticks([])
-        ax_c.set_yticks([])
-        ax_c.set_title(c_title, fontsize=9.8, pad=5)
-
-    _finalize_journal_figure(fig, categorical_axes=(ax2,), topology_axes=(ax, *c_axes))
-    fig.savefig(assets_dir / "network_control_topology.png", bbox_inches="tight")
-    plt.close(fig)
-
-    return {
+    exp2_summary = {
         "n_nodes": sc_res.n_nodes,
         "n_edges": sc_res.n_edges,
         "n_drivers": sc_res.n_drivers,
@@ -718,6 +153,9 @@ def run_topology_and_link_classification(assets_dir: Path) -> dict:
         "edge_counts": {k: len(v) for k, v in edge_classes.items()},
     }
 
+    build_network_topology_figure(exp2_summary, assets_dir / "network_control_topology.png")
+    return exp2_summary
+
 
 def run_submodular_gramian_experiment(assets_dir: Path) -> dict:
     """Compare actuator coverage, effort and endpoint error on a seeded linear cascade."""
@@ -729,8 +167,11 @@ def run_submodular_gramian_experiment(assets_dir: Path) -> dict:
     x0 = np.random.default_rng(42).uniform(0.8, 2.0, size=len(A))
     xf = np.zeros_like(x0)
     methods = {
-        "Submodular Greedy": "greedy", "Out-Degree Hubs": "out_degree",
-        "PageRank": "pagerank", "Betweenness": "betweenness", "Random": "random",
+        "Submodular Greedy": "greedy",
+        "Out-Degree Hubs": "out_degree",
+        "PageRank": "pagerank",
+        "Betweenness": "betweenness",
+        "Random": "random",
     }
     rows = []
     for k in budgets:
@@ -749,83 +190,93 @@ def run_submodular_gramian_experiment(assets_dir: Path) -> dict:
                 }
             else:
                 selected, metrics = select_actuators_baseline(
-                    G, A, k, strategy=strategy, horizon=horizon,
-                    reg=selection_ridge, seed=42 + k,
+                    G,
+                    A,
+                    k,
+                    strategy=strategy,
+                    horizon=horizon,
+                    reg=selection_ridge,
+                    seed=42 + k,
                 )
             B = build_input_matrix(len(A), selected)
             trajectory = minimum_energy_trajectory(
-                A, B, x0, xf, horizon=horizon, reg=steering_ridge,
+                A,
+                B,
+                x0,
+                xf,
+                horizon=horizon,
+                reg=steering_ridge,
                 endpoint_tolerances=tolerances,
             )
             row = {
-                "budget": k, "strategy": name, "selected_nodes": selected,
-                "log_det": metrics["log_det"], "normalized_log_det": metrics["normalized_log_det"],
-                "terminal_state": trajectory["x"][-1].tolist(), **audit,
+                "budget": k,
+                "strategy": name,
+                "selected_nodes": selected,
+                "log_det": metrics["log_det"],
+                "normalized_log_det": metrics["normalized_log_det"],
+                "terminal_state": trajectory["x"][-1].tolist(),
+                **audit,
             }
-            for key in ("input_energy", "terminal_error", "terminal_penalty",
-                        "regularized_objective", "reachability_rank", "rank_tolerance",
-                        "minimum_terminal_error", "exact_target_reachable", "exact_target_energy",
-                        "endpoint_numerical_atol", "tolerance_comparison"):
+            for key in (
+                "input_energy",
+                "terminal_error",
+                "terminal_penalty",
+                "regularized_objective",
+                "reachability_rank",
+                "rank_tolerance",
+                "minimum_terminal_error",
+                "exact_target_reachable",
+                "exact_target_energy",
+                "endpoint_numerical_atol",
+                "tolerance_comparison",
+            ):
                 row[key] = trajectory[key]
             rows.append(row)
 
-    styles = [
-        ("crimson", "o"), ("navy", "s"), ("emerald", "^"), ("plum", "D"), ("slate", "X"),
-    ]
-    fig, axes = plt.subplots(2, 2, figsize=(11.2, 7.6))
-    panels = [
-        ("normalized_log_det", "Normalized log determinant", "(a) Reachable volume"),
-        ("input_energy", "Continuous input energy", "(b) Input energy, fixed terminal penalty"),
-        ("terminal_error", "Terminal state error (L2 norm)", "(c) Residual, fixed terminal penalty"),
-    ]
-    for (name, (color, marker)) in zip(methods, styles):
-        series = [row for row in rows if row["strategy"] == name]
-        options = {"color": PALETTE_JOURNAL[color], "marker": marker, "label": name}
-        for ax, (metric, _, _) in zip(axes.flat, panels):
-            ax.plot(budgets, [row[metric] for row in series], **options)
-        ref = next(row for row in series if row["budget"] == 10)
-        matches = ref["tolerance_comparison"]
-        axes[1, 1].plot(tolerances, [
-            v["input_energy"] if v["feasible"] else np.nan for v in matches
-        ], **options)
-    for ax, (_, ylabel, title) in zip(axes.flat, panels):
-        ax.set(xlabel="Actuator budget", ylabel=ylabel, title=title, xticks=budgets)
-    axes[1, 1].set(xlabel="Allowed terminal error (L2 norm)", ylabel="Minimum input energy",
-                   title="(d) Matched endpoint tolerance, 10 actuators", yscale="log",
-                   xticks=tolerances, xticklabels=["0.45", "0.50"])
-    axes[1, 1].margins(x=0.15)
-    handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, ncol=5, loc="lower center", fontsize=9)
-    fig.tight_layout(rect=(0, 0.045, 1, 1), pad=1.1)
-    _finalize_journal_figure(fig)
-    fig.savefig(assets_dir / "actuator_submodular_benchmark.png")
-    plt.close(fig)
-
-    return {
+    exp3_summary = {
         "budgets": budgets,
         "protocol": {
-            "nodes": len(A), "node_order": list(range(len(A))), "graph_seed": 7,
-            "branch_factor": 2.3, "damping": 1.15, "coupling": 0.38, "laplacian_weight": 0.5,
-            "initial_state_seed": 42, "random_selection_seed": "42 + budget",
-            "horizon": horizon, "selection_ridge": selection_ridge, "steering_ridge": steering_ridge,
-            "trajectory_steps": 80, "endpoint_tolerances": list(tolerances),
+            "nodes": len(A),
+            "node_order": list(range(len(A))),
+            "graph_seed": 7,
+            "branch_factor": 2.3,
+            "damping": 1.15,
+            "coupling": 0.38,
+            "laplacian_weight": 0.5,
+            "initial_state_seed": 42,
+            "random_selection_seed": "42 + budget",
+            "horizon": horizon,
+            "selection_ridge": selection_ridge,
+            "steering_ridge": steering_ridge,
+            "trajectory_steps": 80,
+            "endpoint_tolerances": list(tolerances),
             "inputs": "Unbounded continuous inputs on selected coordinates",
             "energy": "Integral of squared input over [0,T]",
             "regularized_objective": "input_energy + terminal_error^2 / steering_ridge",
             "exact_target_energy": "Minimum energy when target displacement lies in numerical reachable subspace; null otherwise",
             "rank": "SVD of a square-root finite-horizon Gramian; absolute singular-value cutoff saved for each row",
         },
-        "system_matrix": A.tolist(), "initial_state": x0.tolist(), "target_state": xf.tolist(),
+        "system_matrix": A.tolist(),
+        "initial_state": x0.tolist(),
+        "target_state": xf.tolist(),
         "graph_edges": [[int(u), int(v), float(attrs["weight"])] for u, v, attrs in G.edges(data=True)],
         "budget_10_comparison": {row["strategy"]: row for row in rows if row["budget"] == 10},
         "runs": rows,
     }
 
+    build_actuator_submodular_figure(exp3_summary, assets_dir / "actuator_submodular_benchmark.png")
+    return exp3_summary
+
 
 def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
-    """Compare feedback on the same synthetic graph; train each learned policy once."""
+    """Compare feedback on the same synthetic graph; replay frozen weights when archived."""
     results_dir = assets_dir.parent / "results"
-    record = evaluate_feedback(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    root_results = ROOT / "results"
+    use_replay = (root_results / WEIGHTS).exists() and (root_results / RECORDS).exists()
+    eval_dir = root_results if use_replay else results_dir
+    record = evaluate_feedback(eval_dir, replay=use_replay)
+
     splits = record["splits"]
     seen = splits["reference_in_training"][0]["scores"]
     table = []
@@ -842,216 +293,61 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
             "terminal_norm": round(values["terminal_norm"], 4),
             "settling_time_s": None if settled is None else round(settled, 3),
         })
+
     stats = {}
     for split in ("original_10", "additional_80"):
         trials = splits[split]
         stats[split] = {}
         for method in LABELS:
-            values = {field: mean_metric(trials, method, field)
-                      for field in ("ise_state", "control_energy", "applied_input_energy",
-                                    "running_j", "total_j", "terminal_norm")}
+            values = {
+                field: mean_metric(trials, method, field)
+                for field in (
+                    "ise_state",
+                    "control_energy",
+                    "applied_input_energy",
+                    "running_j",
+                    "total_j",
+                    "terminal_norm",
+                )
+            }
             negatives = [r["scores"][method]["minimum_coordinate"] for r in trials]
-            values.update(n=len(trials), minimum_coordinate=min(negatives),
-                          negative_trajectories=sum(v < -1e-6 for v in negatives))
+            values.update(
+                n=len(trials),
+                minimum_coordinate=min(negatives),
+                negative_trajectories=sum(v < -1e-6 for v in negatives),
+            )
             stats[split][method] = values
 
-    # Recompute held-out state-norm trajectories from the saved exact weights for Panel (a)
-    from scripts.neural_pinning_comparison import (
-        CAP,
-        QF,
-        Q as Q_PIN,
-        R as R_PIN,
-        SEED as PIN_SEED,
-        STEPS as PIN_STEPS,
-        T as PIN_T,
-        _model_set,
-        finite_horizon_gains,
-        set_or_train_weights,
+    inf_path = root_results / "holdout_paired_inference.json"
+    inference = (
+        json.loads(inf_path.read_text(encoding="utf-8"))
+        if inf_path.exists()
+        else compute_holdout_inference(eval_dir)
     )
-    from netcontrol.neural_pinning import rollout_pinning_torch
-    from netcontrol import solve_lqr_controller
-    import torch
-
-    g28 = reaction_cascade_network(n=28, branch_factor=2.3, seed=PIN_SEED)
-    A28 = build_continuous_system_matrix(g28, damping=0.55, coupling=0.36)
-    A28_t = torch.tensor(A28, dtype=torch.float32)
-    drv28 = sorted(v for v in g28 if g28.in_degree(v) == 0)
-    pins28, _ = select_actuators_submodular(A28, budget_k=8, horizon=2.5, mandatory_nodes=drv28[:4])
-    B28 = build_input_matrix(len(g28), pins28)
-    K28_np, _ = solve_lqr_controller(A28, B28, q_weight=Q_PIN, r_weight=R_PIN)
-    K28_t = torch.tensor(K28_np, dtype=torch.float32)
-    models28 = _model_set(g28, drv28, pins28, K28_t)
-    set_or_train_weights(models28, A28_t, pins28, torch.zeros((1, 28)), results_dir, replay=True)
-    x80_t = torch.tensor([r["x0"] for r in splits["additional_80"]], dtype=torch.float32)
-
-    def _b_ctrl(raw_u: torch.Tensor) -> torch.Tensor:
-        return CAP * torch.tanh(raw_u / CAP)
-
-    traj_policies = [
-        ("uncontrolled", "Uncontrolled", lambda x: torch.zeros(x.shape[0], len(pins28)), PALETTE_JOURNAL["slate"], ":"),
-        ("self_only", "Self-only neural (0-hop)", models28["self_only"], PALETTE_JOURNAL["plum"], "--"),
-        ("care", "CARE LQR (global linear)", lambda x: _b_ctrl(-x @ K28_t.T), PALETTE_JOURNAL["ochre"], "-."),
-        ("local_linear", "Trained 1-hop linear", models28["local_linear"], PALETTE_JOURNAL["navy"], "--"),
-        ("gnn", "1-hop GNN (local nonlinear)", models28["gnn"], PALETTE_JOURNAL["emerald"], "-"),
-        ("full_linear", "Full-state linear (oracle)", models28["full_linear"], PALETTE_JOURNAL["crimson"], "-"),
-    ]
-    traj_curves = {}
-    with torch.no_grad():
-        for m_key, m_lbl, ctrl_fn, col, ls in traj_policies:
-            ts_t, xs_t, _ = rollout_pinning_torch(A28_t, x80_t, pins28, ctrl_fn, PIN_T, PIN_STEPS)
-            norms = np.linalg.norm(xs_t.numpy(), axis=2)  # (T+1, 80)
-            traj_curves[m_key] = (
-                ts_t.numpy(),
-                np.mean(norms, axis=1),
-                np.percentile(norms, 25, axis=1),
-                np.percentile(norms, 75, axis=1),
-                m_lbl,
-                col,
-                ls,
-            )
-
-    methods = ("self_only", "care", "finite_lqr", "local_linear", "gnn", "full_linear")
-    short_labels = {
-        "self_only": "Self-only neural\n(0-hop local)",
-        "care": "CARE LQR\n(all-to-all)",
-        "finite_lqr": "Finite-horizon LQR\n(all-to-all)",
-        "local_linear": "Trained 1-hop linear\n(1-hop local)",
-        "gnn": "1-hop GNN\n(1-hop local)",
-        "full_linear": "Trained full-state\n(all-to-all oracle)",
-    }
-
-    fig, (ax_tr, ax_j, ax_pe) = plt.subplots(
-        1, 3, figsize=(16.2, 5.2), gridspec_kw={"width_ratios": [1.14, 1.14, 1.04]}
+    build_neural_pinning_figure(
+        record,
+        inference,
+        eval_dir,
+        assets_dir / "neural_pinning_trajectories.png",
     )
-
-    # Panel (a): State norm ||x(t)||_2 trajectories (mean + IQR across 80 held-out states)
-    for m_key, *_ in traj_policies:
-        t_arr, mu_n, q25_n, q75_n, m_lbl, col, ls = traj_curves[m_key]
-        lw = 2.35 if m_key in ("gnn", "local_linear") else 1.75
-        ax_tr.plot(t_arr, mu_n, color=col, linestyle=ls, linewidth=lw, label=m_lbl, zorder=4 if m_key == "gnn" else 3)
-        if m_key in ("gnn", "local_linear", "care", "self_only"):
-            ax_tr.fill_between(t_arr, q25_n, q75_n, color=col, alpha=0.11, zorder=2)
-    ax_tr.set_xlim(0.0, 4.0)
-    ax_tr.set_ylim(2.7, 11.7)
-    ax_tr.set_xlabel("Time $t$ (s)")
-    ax_tr.set_ylabel("State Euclidean Norm $||x(t)||_2$")
-    ax_tr.set_title("(a) Closed-Loop Trajectories (80 Held-Out States)", pad=8)
-    ax_tr.legend(loc="center right", bbox_to_anchor=(0.985, 0.64), fontsize=7.6, frameon=True, fancybox=False)
-
-    # Panel (b): Total Cost J distribution across Original 10 + Holdout 80 initial states
-    y = np.arange(len(methods))
-    j80_by_m = [[r["scores"][m]["total_j"] for r in splits["additional_80"]] for m in methods]
-    bp = ax_j.boxplot(
-        j80_by_m,
-        positions=y,
-        vert=False,
-        widths=0.46,
-        patch_artist=True,
-        showfliers=False,
-        medianprops={"color": "#111111", "linewidth": 1.6},
-        whiskerprops={"color": "#334155", "linewidth": 1.15},
-        capprops={"color": "#334155", "linewidth": 1.15},
-    )
-    is_local = {"self_only": True, "local_linear": True, "gnn": True, "care": False, "finite_lqr": False, "full_linear": False}
-    for patch, m in zip(bp["boxes"], methods):
-        patch.set_facecolor("#D1FAE5" if is_local[m] else "#DBEAFE")
-        patch.set_edgecolor("#065F46" if is_local[m] else "#1E40AF")
-        patch.set_linewidth(1.2)
-        patch.set_alpha(0.85)
-
-    ax_j.scatter(
-        [stats["original_10"][m]["total_j"] for m in methods],
-        y - 0.14,
-        marker="o",
-        color=PALETTE_JOURNAL["navy"],
-        edgecolor="#FFFFFF",
-        linewidth=0.7,
-        s=46,
-        label="Mean (Original 10 states)",
-        zorder=5,
-    )
-    ax_j.scatter(
-        [stats["additional_80"][m]["total_j"] for m in methods],
-        y + 0.14,
-        marker="D",
-        color=PALETTE_JOURNAL["crimson"],
-        edgecolor="#FFFFFF",
-        linewidth=0.7,
-        s=46,
-        label="Mean (Holdout 80 states)",
-        zorder=5,
-    )
-    ax_j.set_yticks(y, [short_labels[m] for m in methods])
-    ax_j.set_ylim(len(methods) - 0.45, -0.55)
-    ax_j.set_xlabel("Closed-Loop Total Cost $J$ (Lower is Better)")
-    ax_j.set_title("(b) Held-Out Cost Distribution (Green: Local, Blue: Global)", pad=8)
-    ax_j.legend(loc="lower right", fontsize=8.0, frameon=True, fancybox=False)
-
-    # Panel (c): Mean Cost J vs Applied Input Energy (Holdout 80 states) with Local vs Global grouping
-    offsets_pe = {
-        "care": (-16, 28),
-        "finite_lqr": (10, 22),
-        "local_linear": (-76, 30),
-        "full_linear": (-92, -30),
-        "self_only": (-92, -16),
-        "gnn": (-42, 34),
-    }
-    for loc_flag, grp_lbl, mk, col in [
-        (True, "Local Observation (0/1-Hop)", "s", PALETTE_JOURNAL["emerald"]),
-        (False, "Global Observation (All 28 States)", "^", PALETTE_JOURNAL["navy"]),
-    ]:
-        sub_ms = [m for m in methods if is_local[m] == loc_flag]
-        xs_e = [stats["additional_80"][m]["applied_input_energy"] for m in sub_ms]
-        ys_j = [stats["additional_80"][m]["total_j"] for m in sub_ms]
-        es_sd = [np.std([r["scores"][m]["applied_input_energy"] for r in splits["additional_80"]]) for m in sub_ms]
-        js_sd = [np.std([r["scores"][m]["total_j"] for r in splits["additional_80"]]) for m in sub_ms]
-        ax_pe.errorbar(
-            xs_e,
-            ys_j,
-            xerr=es_sd,
-            yerr=js_sd,
-            fmt=mk,
-            color=col,
-            ecolor=col,
-            elinewidth=1.1,
-            capsize=3.0,
-            markersize=7.5,
-            markeredgecolor="#111111",
-            markeredgewidth=0.9,
-            alpha=0.92,
-            label=grp_lbl,
-            zorder=4,
-        )
-        for m in sub_ms:
-            ex = stats["additional_80"][m]["applied_input_energy"]
-            jy = stats["additional_80"][m]["total_j"]
-            dx, dy = offsets_pe[m]
-            ax_pe.annotate(
-                LABELS[m],
-                xy=(ex, jy),
-                xytext=(dx, dy),
-                textcoords="offset points",
-                fontsize=7.9,
-                color="#111111",
-                arrowprops={"arrowstyle": "-", "color": "#64748B", "lw": 0.8},
-            )
-    ax_pe.set_xlim(118, 250)
-    ax_pe.set_ylim(565, 1345)
-    ax_pe.set_xlabel(r"Mean Applied Input Energy $E_{\mathrm{applied}}$")
-    ax_pe.set_ylabel("Mean Closed-Loop Cost $J$ (80 States)")
-    ax_pe.set_title("(c) Cost vs. Energy by Observation Scope", pad=8)
-    ax_pe.legend(loc="upper left", fontsize=8.0, frameon=True, fancybox=False)
-
-    fig.tight_layout(pad=1.05)
-    _finalize_journal_figure(fig, categorical_axes=(ax_j,))
-    fig.savefig(assets_dir / "neural_pinning_trajectories.png", bbox_inches="tight")
-    plt.close(fig)
 
     primary = stats["original_10"]
-    history = record["reference_loss_history"]["gnn"]
+    history = record.get("reference_loss_history", {}).get("gnn", [])
+    if not history and (root_results / "benchmark_summary.json").exists():
+        prev_b = json.loads((root_results / "benchmark_summary.json").read_text(encoding="utf-8"))
+        e4_prev = prev_b["experiment_4_neural_pinning_control"]
+        t_init = e4_prev["training_initial_loss"]
+        t_final = e4_prev["training_final_loss"]
+    else:
+        t_init = round(history[0], 4)
+        t_final = round(history[-1], 4)
+
     return {
-        "n_nodes": 28, "budget_k": 8, "selected_pinned_nodes": record["protocol"]["pinned_nodes"],
-        "training_initial_loss": round(history[0], 4), "training_final_loss": round(history[-1], 4),
+        "n_nodes": 28,
+        "budget_k": 8,
+        "selected_pinned_nodes": record["protocol"]["pinned_nodes"],
+        "training_initial_loss": t_init,
+        "training_final_loss": t_final,
         "unseen_initial_states_eval": {
             "n_unseen_trials": len(splits["original_10"]),
             "lqr_mean_ise": round(primary["care"]["ise_state"], 4),
@@ -1059,9 +355,11 @@ def run_neural_pinning_experiment(assets_dir: Path) -> Tuple[dict, list]:
             "lqr_mean_total_J": round(primary["care"]["total_j"], 4),
             "gnn_mean_total_J": round(primary["gnn"]["total_j"], 4),
         },
-        "per_initial_state_file": RECORDS, "trained_weights_file": WEIGHTS,
+        "per_initial_state_file": RECORDS,
+        "trained_weights_file": WEIGHTS,
         "replay_command": "python -m scripts.neural_pinning_comparison --replay",
-        "held_out_mean_metrics": stats, "comparison": table,
+        "held_out_mean_metrics": stats,
+        "comparison": table,
     }, table
 
 
@@ -1081,7 +379,7 @@ def run_all(output_dir: Path) -> None:
     print("[3/4] Comparing actuator reachability, input energy and terminal error...")
     exp3 = run_submodular_gramian_experiment(assets_dir)
 
-    print("[4/4] Training & evaluating Differentiable Graph Neural Pinning Controller...")
+    print("[4/4] Evaluating Differentiable Graph Neural Pinning Controller...")
     exp4, table_rows = run_neural_pinning_experiment(assets_dir)
 
     summary = {
@@ -1112,16 +410,23 @@ def run_all(output_dir: Path) -> None:
         writer.writeheader()
         writer.writerows(table_rows)
 
+    if (ROOT / "results" / RECORDS).exists():
+        shutil.copyfile(ROOT / "results" / RECORDS, results_dir / RECORDS)
+        compute_holdout_inference(results_dir)
+
 
 def main() -> None:
-    with TemporaryDirectory(dir=ROOT) as temp:
+    temp_root = Path("D:/AntigravityWork/.tmp") if Path("D:/AntigravityWork/.tmp").exists() else ROOT
+    with TemporaryDirectory(dir=temp_root) as temp:
         output = Path(temp)
         run_all(output)
         for folder in ("assets", "results"):
             destination = ROOT / folder
             destination.mkdir(exist_ok=True)
             for result in (output / folder).iterdir():
-                result.replace(destination / result.name)
+                if result.name in (RECORDS, WEIGHTS) and (destination / result.name).exists():
+                    continue
+                shutil.move(str(result), str(destination / result.name))
     print("All benchmarks completed successfully. Results saved to results/ and assets/.")
 
 

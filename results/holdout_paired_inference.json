@@ -1,0 +1,1930 @@
+{
+  "metadata": {
+    "source_holdout_file": "results/neural_pinning_holdouts.json",
+    "source_holdout_sha256": "860319f4b213b24a00e9230a804f4c67a791142f08eff4ff9a1d907a4ef7040c",
+    "source_benchmark_file": "results/benchmark_summary.json",
+    "bootstrap_resamples": 10000,
+    "bootstrap_seed": 2026,
+    "confidence_level": 0.95,
+    "paired_test": "Two-sided Wilcoxon signed-rank test with Holm-Bonferroni step-down adjustment",
+    "available_policies": [
+      "uncontrolled",
+      "random_proportional",
+      "proportional",
+      "care",
+      "finite_lqr",
+      "local_linear",
+      "full_linear",
+      "self_only",
+      "gnn"
+    ],
+    "gnn_random_actuators_present": false,
+    "actuator_placement_contrast_note": "neural_pinning_holdouts.json evaluates greedy actuators [0,1,2,3,4,6,13,18] vs. random actuators [13,25,20,26,17,11,4,27] under identical bounded proportional feedback ('proportional' vs. 'random_proportional'); all learned neural/linear controllers share the fixed 8 greedy actuators.",
+    "gnn_fraction_of_global_linear_gap_recovered_80": 0.804246
+  },
+  "policy_summaries": {
+    "original_10": {
+      "uncontrolled": {
+        "label": "Uncontrolled cascade",
+        "n_trials": 10,
+        "total_j_mean": 2802.0957732715137,
+        "total_j_sd": 150.11163256248898,
+        "total_j_median": 2806.815088768561,
+        "total_j_p10_p90": [
+          2658.019280719052,
+          2932.9418187360657
+        ],
+        "running_j_mean": 1404.4695898000068,
+        "state_cost_plus_terminal_mean": 2802.0957732715137,
+        "state_cost_plus_terminal_sd": 150.11163256248898,
+        "terminal_cost_mean": 1397.626183471507,
+        "ise_state_mean": 468.1565299333357,
+        "applied_input_energy_mean": 0.0,
+        "applied_input_energy_sd": 0.0,
+        "sampled_control_energy_mean": 0.0,
+        "terminal_norm_mean": 10.790713324895446
+      },
+      "random_proportional": {
+        "label": "Random actuators + proportional",
+        "n_trials": 10,
+        "total_j_mean": 1734.3274254099028,
+        "total_j_sd": 113.31698073047322,
+        "total_j_median": 1716.297801519375,
+        "total_j_p10_p90": [
+          1619.5222324604172,
+          1855.5425349040327
+        ],
+        "running_j_mean": 918.3303651765436,
+        "state_cost_plus_terminal_mean": 1729.7359816656935,
+        "state_cost_plus_terminal_sd": 112.94615782988836,
+        "terminal_cost_mean": 815.9970602333594,
+        "ise_state_mean": 304.57964047744474,
+        "applied_input_energy_mean": 60.31420401284356,
+        "applied_input_energy_sd": 6.512039841431272,
+        "sampled_control_energy_mean": 57.39304680261809,
+        "terminal_norm_mean": 8.244816326458562
+      },
+      "proportional": {
+        "label": "Greedy actuators + proportional",
+        "n_trials": 10,
+        "total_j_mean": 1181.4155126739095,
+        "total_j_sd": 80.25654828198955,
+        "total_j_median": 1181.590586045551,
+        "total_j_p10_p90": [
+          1080.3864355068686,
+          1267.808451957891
+        ],
+        "running_j_mean": 718.1574399789426,
+        "state_cost_plus_terminal_mean": 1178.7310827393137,
+        "state_cost_plus_terminal_sd": 79.86323906005784,
+        "terminal_cost_mean": 463.2580726949668,
+        "ise_state_mean": 238.49100334811564,
+        "applied_input_energy_mean": 36.46864233308712,
+        "applied_input_energy_sd": 6.793604256064288,
+        "sampled_control_energy_mean": 33.55537418244549,
+        "terminal_norm_mean": 6.212124169889021
+      },
+      "care": {
+        "label": "Steady-state CARE-LQR",
+        "n_trials": 10,
+        "total_j_mean": 742.7124281225631,
+        "total_j_sd": 69.68811756904304,
+        "total_j_median": 743.7052059273603,
+        "total_j_p10_p90": [
+          650.597547711521,
+          808.0308272236034
+        ],
+        "running_j_mean": 526.0978343221898,
+        "state_cost_plus_terminal_mean": 733.1285399720696,
+        "state_cost_plus_terminal_sd": 68.73447686619477,
+        "terminal_cost_mean": 216.61459380037346,
+        "ise_state_mean": 172.1713153905654,
+        "applied_input_energy_mean": 126.83001195425959,
+        "applied_input_energy_sd": 13.62992076043053,
+        "sampled_control_energy_mean": 119.79860188116788,
+        "terminal_norm_mean": 4.246297241221794
+      },
+      "finite_lqr": {
+        "label": "Finite-horizon Riccati LQR",
+        "n_trials": 10,
+        "total_j_mean": 704.3036450993701,
+        "total_j_sd": 66.31564839860488,
+        "total_j_median": 703.2515346564143,
+        "total_j_p10_p90": [
+          619.2626252369885,
+          770.6758782938159
+        ],
+        "running_j_mean": 525.9270701431362,
+        "state_cost_plus_terminal_mean": 693.1920785167483,
+        "state_cost_plus_terminal_sd": 65.21225900956641,
+        "terminal_cost_mean": 178.37657495623375,
+        "ise_state_mean": 171.60516785350487,
+        "applied_input_energy_mean": 142.03550717026715,
+        "applied_input_energy_sd": 15.161843259748418,
+        "sampled_control_energy_mean": 138.89458228277095,
+        "terminal_norm_mean": 3.8539294705228713
+      },
+      "local_linear": {
+        "label": "Local linear feedback (1-hop)",
+        "n_trials": 10,
+        "total_j_mean": 655.9540550669651,
+        "total_j_sd": 67.33709949463712,
+        "total_j_median": 653.3612465237995,
+        "total_j_p10_p90": [
+          573.8925191693302,
+          725.925231587923
+        ],
+        "running_j_mean": 506.275604786288,
+        "state_cost_plus_terminal_mean": 641.273707822971,
+        "state_cost_plus_terminal_sd": 66.15965698396762,
+        "terminal_cost_mean": 149.678450280677,
+        "ise_state_mean": 163.86508584743137,
+        "applied_input_energy_mean": 190.5559063855945,
+        "applied_input_energy_sd": 16.52814280677589,
+        "sampled_control_energy_mean": 183.5043405499247,
+        "terminal_norm_mean": 3.529959398079214
+      },
+      "full_linear": {
+        "label": "Full-state linear feedback",
+        "n_trials": 10,
+        "total_j_mean": 630.8629799694138,
+        "total_j_sd": 67.55826079079934,
+        "total_j_median": 624.2500012394568,
+        "total_j_p10_p90": [
+          554.3256712479985,
+          707.450123382055
+        ],
+        "running_j_mean": 517.8838277835625,
+        "state_cost_plus_terminal_mean": 615.3461379237057,
+        "state_cost_plus_terminal_sd": 66.26596580108408,
+        "terminal_cost_mean": 112.97915218585133,
+        "ise_state_mean": 167.45566191261807,
+        "applied_input_energy_mean": 201.0963287817044,
+        "applied_input_energy_sd": 19.414062070601034,
+        "sampled_control_energy_mean": 193.96052557135366,
+        "terminal_norm_mean": 3.0659751897029013
+      },
+      "self_only": {
+        "label": "Self-only neural controller",
+        "n_trials": 10,
+        "total_j_mean": 1157.2992145759104,
+        "total_j_sd": 120.1041128197438,
+        "total_j_median": 1189.7960142235106,
+        "total_j_p10_p90": [
+          1050.1679467380934,
+          1253.5077708857887
+        ],
+        "running_j_mean": 648.6358198160691,
+        "state_cost_plus_terminal_mean": 1141.2243678335283,
+        "state_cost_plus_terminal_sd": 119.07538988321592,
+        "terminal_cost_mean": 508.6633947598416,
+        "ise_state_mean": 210.8536576912289,
+        "applied_input_energy_mean": 207.37055409021315,
+        "applied_input_energy_sd": 14.58375419862135,
+        "sampled_control_energy_mean": 200.93558427978078,
+        "terminal_norm_mean": 6.494384515619572
+      },
+      "gnn": {
+        "label": "1-hop GNN",
+        "n_trials": 10,
+        "total_j_mean": 636.0812902011245,
+        "total_j_sd": 67.73588037114139,
+        "total_j_median": 632.2048992954155,
+        "total_j_p10_p90": [
+          556.5175475859544,
+          709.2654317051959
+        ],
+        "running_j_mean": 515.9291715073383,
+        "state_cost_plus_terminal_mean": 618.4743845553984,
+        "state_cost_plus_terminal_sd": 66.72432979572696,
+        "terminal_cost_mean": 120.15211869378611,
+        "ise_state_mean": 166.10742195387078,
+        "applied_input_energy_mean": 227.27593011358255,
+        "applied_input_energy_sd": 14.459078826711997,
+        "sampled_control_energy_mean": 220.08632057157465,
+        "terminal_norm_mean": 3.1624384419873146
+      }
+    },
+    "additional_80": {
+      "uncontrolled": {
+        "label": "Uncontrolled cascade",
+        "n_trials": 80,
+        "total_j_mean": 2876.5581467312163,
+        "total_j_sd": 85.74730940584818,
+        "total_j_median": 2871.6627982464665,
+        "total_j_p10_p90": [
+          2762.226106727002,
+          2993.7592987726275
+        ],
+        "running_j_mean": 1458.6570995142265,
+        "state_cost_plus_terminal_mean": 2876.5581467312163,
+        "state_cost_plus_terminal_sd": 85.74730940584818,
+        "terminal_cost_mean": 1417.9010472169898,
+        "ise_state_mean": 486.21903317140897,
+        "applied_input_energy_mean": 0.0,
+        "applied_input_energy_sd": 0.0,
+        "sampled_control_energy_mean": 0.0,
+        "terminal_norm_mean": 10.869503244858564
+      },
+      "random_proportional": {
+        "label": "Random actuators + proportional",
+        "n_trials": 80,
+        "total_j_mean": 1782.3451514804924,
+        "total_j_sd": 60.795177209632385,
+        "total_j_median": 1781.0316560195379,
+        "total_j_p10_p90": [
+          1709.9571003526116,
+          1865.2383852886753
+        ],
+        "running_j_mean": 955.4848790167476,
+        "state_cost_plus_terminal_mean": 1777.4890456746666,
+        "state_cost_plus_terminal_sd": 60.61243912334486,
+        "terminal_cost_mean": 826.8602724637445,
+        "ise_state_mean": 316.8762577369741,
+        "applied_input_energy_mean": 63.67503394245007,
+        "applied_input_energy_sd": 6.447604264587134,
+        "sampled_control_energy_mean": 60.70132257281712,
+        "terminal_norm_mean": 8.300377279759374
+      },
+      "proportional": {
+        "label": "Greedy actuators + proportional",
+        "n_trials": 80,
+        "total_j_mean": 1225.0764868345898,
+        "total_j_sd": 52.000848347006645,
+        "total_j_median": 1224.3477074747898,
+        "total_j_p10_p90": [
+          1160.8717124137268,
+          1286.7461398612388
+        ],
+        "running_j_mean": 751.3810130646802,
+        "state_cost_plus_terminal_mean": 1222.2076497105877,
+        "state_cost_plus_terminal_sd": 51.96275205201708,
+        "terminal_cost_mean": 473.6954737699094,
+        "ise_state_mean": 249.5040586468928,
+        "applied_input_energy_mean": 38.93818204156662,
+        "applied_input_energy_sd": 5.418749175349331,
+        "sampled_control_energy_mean": 35.860464050022834,
+        "terminal_norm_mean": 6.282345043847785
+      },
+      "care": {
+        "label": "Steady-state CARE-LQR",
+        "n_trials": 80,
+        "total_j_mean": 778.139386676947,
+        "total_j_sd": 45.5811894647207,
+        "total_j_median": 775.6487659450888,
+        "total_j_p10_p90": [
+          716.6564236295757,
+          831.0489003961214
+        ],
+        "running_j_mean": 555.3417159171993,
+        "state_cost_plus_terminal_mean": 768.0421208430283,
+        "state_cost_plus_terminal_sd": 45.2694201348298,
+        "terminal_cost_mean": 222.7976707597476,
+        "ise_state_mean": 181.74815002776026,
+        "applied_input_energy_mean": 133.27762841274807,
+        "applied_input_energy_sd": 8.423668650029958,
+        "sampled_control_energy_mean": 126.21582292398205,
+        "terminal_norm_mean": 4.307841901981095
+      },
+      "finite_lqr": {
+        "label": "Finite-horizon Riccati LQR",
+        "n_trials": 80,
+        "total_j_mean": 737.7762473644907,
+        "total_j_sd": 43.37094144367716,
+        "total_j_median": 734.390583913412,
+        "total_j_p10_p90": [
+          681.2291458545218,
+          787.4836012374465
+        ],
+        "running_j_mean": 555.1078250560847,
+        "state_cost_plus_terminal_mean": 726.0968192643392,
+        "state_cost_plus_terminal_sd": 42.97535701401837,
+        "terminal_cost_mean": 182.66842230840595,
+        "ise_state_mean": 181.14279898531106,
+        "applied_input_energy_mean": 149.132111398816,
+        "applied_input_energy_sd": 9.062665080827301,
+        "sampled_control_energy_mean": 145.992851251894,
+        "terminal_norm_mean": 3.9008316975480093
+      },
+      "local_linear": {
+        "label": "Local linear feedback (1-hop)",
+        "n_trials": 80,
+        "total_j_mean": 689.2888814327152,
+        "total_j_sd": 43.57424130992322,
+        "total_j_median": 686.61583506846,
+        "total_j_p10_p90": [
+          638.2173937934612,
+          738.5834811162601
+        ],
+        "running_j_mean": 535.4414685389723,
+        "state_cost_plus_terminal_mean": 673.9466858636794,
+        "state_cost_plus_terminal_sd": 43.05798825642165,
+        "terminal_cost_mean": 153.84741289374273,
+        "ise_state_mean": 173.36642432331217,
+        "applied_input_energy_mean": 198.86047890159253,
+        "applied_input_energy_sd": 10.558819669190871,
+        "sampled_control_energy_mean": 191.77744461294787,
+        "terminal_norm_mean": 3.57969399719002
+      },
+      "full_linear": {
+        "label": "Full-state linear feedback",
+        "n_trials": 80,
+        "total_j_mean": 663.4243685618563,
+        "total_j_sd": 43.39875796189715,
+        "total_j_median": 661.5991319798082,
+        "total_j_p10_p90": [
+          614.6477685535446,
+          714.318219027696
+        ],
+        "running_j_mean": 548.7249825516191,
+        "state_cost_plus_terminal_mean": 647.1414126756654,
+        "state_cost_plus_terminal_sd": 42.888541773959965,
+        "terminal_cost_mean": 114.69938601023723,
+        "ise_state_mean": 177.4806755551427,
+        "applied_input_energy_mean": 210.69188116817523,
+        "applied_input_energy_sd": 11.972396144374706,
+        "sampled_control_energy_mean": 203.5369485773872,
+        "terminal_norm_mean": 3.0896635219353916
+      },
+      "self_only": {
+        "label": "Self-only neural controller",
+        "n_trials": 80,
+        "total_j_mean": 1191.4664878371104,
+        "total_j_sd": 95.14868435295197,
+        "total_j_median": 1217.6837867373988,
+        "total_j_p10_p90": [
+          1054.8565947764992,
+          1277.9312891056397
+        ],
+        "running_j_mean": 675.834510287338,
+        "state_cost_plus_terminal_mean": 1175.1325167923312,
+        "state_cost_plus_terminal_sd": 94.40471043065409,
+        "terminal_cost_mean": 515.6319775497724,
+        "ise_state_mean": 219.83351308085292,
+        "applied_input_energy_mean": 210.4957769582291,
+        "applied_input_energy_sd": 13.077575891862143,
+        "sampled_control_energy_mean": 204.17463805974026,
+        "terminal_norm_mean": 6.54293821778586
+      },
+      "gnn": {
+        "label": "1-hop GNN",
+        "n_trials": 80,
+        "total_j_mean": 668.4874472746881,
+        "total_j_sd": 43.20268829185044,
+        "total_j_median": 666.9015374201915,
+        "total_j_p10_p90": [
+          618.413887737454,
+          717.8440331127334
+        ],
+        "running_j_mean": 545.4962838347053,
+        "state_cost_plus_terminal_mean": 650.2778246205633,
+        "state_cost_plus_terminal_sd": 42.81919466052505,
+        "terminal_cost_mean": 122.99116343998271,
+        "ise_state_mean": 175.76222039352683,
+        "applied_input_energy_mean": 234.80964156170404,
+        "applied_input_energy_sd": 9.185341617852897,
+        "sampled_control_energy_mean": 227.62028317655927,
+        "terminal_norm_mean": 3.2004864011779035
+      }
+    },
+    "pooled_90": {
+      "uncontrolled": {
+        "label": "Uncontrolled cascade",
+        "n_trials": 90,
+        "total_j_mean": 2868.2845496801383,
+        "total_j_sd": 97.91316117475021,
+        "total_j_median": 2870.450009876462,
+        "total_j_p10_p90": [
+          2746.5220219161624,
+          2993.7592987726275
+        ],
+        "running_j_mean": 1452.6362651015356,
+        "state_cost_plus_terminal_mean": 2868.2845496801383,
+        "state_cost_plus_terminal_sd": 97.91316117475021,
+        "terminal_cost_mean": 1415.648284578603,
+        "ise_state_mean": 484.2120883671784,
+        "applied_input_energy_mean": 0.0,
+        "applied_input_energy_sd": 0.0,
+        "sampled_control_energy_mean": 0.0,
+        "terminal_norm_mean": 10.860748809307108
+      },
+      "random_proportional": {
+        "label": "Random actuators + proportional",
+        "n_trials": 90,
+        "total_j_mean": 1777.00984858376,
+        "total_j_sd": 70.2840898714057,
+        "total_j_median": 1771.9221484606976,
+        "total_j_p10_p90": [
+          1701.6054121404522,
+          1865.2383852886753
+        ],
+        "running_j_mean": 951.3565997011694,
+        "state_cost_plus_terminal_mean": 1772.1831496736702,
+        "state_cost_plus_terminal_sd": 70.05930750384759,
+        "terminal_cost_mean": 825.6532488825907,
+        "ise_state_mean": 315.5099669303597,
+        "applied_input_energy_mean": 63.301608394716006,
+        "applied_input_energy_sd": 6.540639001883194,
+        "sampled_control_energy_mean": 60.33373637612832,
+        "terminal_norm_mean": 8.294203840503727
+      },
+      "proportional": {
+        "label": "Greedy actuators + proportional",
+        "n_trials": 90,
+        "total_j_mean": 1220.225267483403,
+        "total_j_sd": 57.511632711735444,
+        "total_j_median": 1216.8059706160316,
+        "total_j_p10_p90": [
+          1156.5681942849262,
+          1286.7461398612388
+        ],
+        "running_j_mean": 747.6895049440427,
+        "state_cost_plus_terminal_mean": 1217.376920047113,
+        "state_cost_plus_terminal_sd": 57.40629668675793,
+        "terminal_cost_mean": 472.5357625393603,
+        "ise_state_mean": 248.28038583591754,
+        "applied_input_energy_mean": 38.663788740624454,
+        "applied_input_energy_sd": 5.641875190731721,
+        "sampled_control_energy_mean": 35.604342953625356,
+        "terminal_norm_mean": 6.274542724519033
+      },
+      "care": {
+        "label": "Steady-state CARE-LQR",
+        "n_trials": 90,
+        "total_j_mean": 774.2030579486822,
+        "total_j_sd": 50.10345921986298,
+        "total_j_median": 772.3967480973555,
+        "total_j_p10_p90": [
+          715.3509152682343,
+          831.0489003961214
+        ],
+        "running_j_mean": 552.0923957399762,
+        "state_cost_plus_terminal_mean": 764.1628340795884,
+        "state_cost_plus_terminal_sd": 49.66835549915651,
+        "terminal_cost_mean": 222.1106622087061,
+        "ise_state_mean": 180.68405729029416,
+        "applied_input_energy_mean": 132.5612265840271,
+        "applied_input_energy_sd": 9.37130941825228,
+        "sampled_control_energy_mean": 125.50279836366936,
+        "terminal_norm_mean": 4.301003606341172
+      },
+      "finite_lqr": {
+        "label": "Finite-horizon Riccati LQR",
+        "n_trials": 90,
+        "total_j_mean": 734.0570693350329,
+        "total_j_sd": 47.658505422175885,
+        "total_j_median": 731.1419549328137,
+        "total_j_p10_p90": [
+          680.0989859532339,
+          787.4836012374465
+        ],
+        "running_j_mean": 551.8655189546461,
+        "state_cost_plus_terminal_mean": 722.4407369590513,
+        "state_cost_plus_terminal_sd": 47.12879366663263,
+        "terminal_cost_mean": 182.19155038038687,
+        "ise_state_mean": 180.08306219288815,
+        "applied_input_energy_mean": 148.34359981786614,
+        "applied_input_energy_sd": 10.17460190282199,
+        "sampled_control_energy_mean": 145.20415469976922,
+        "terminal_norm_mean": 3.8956203389896604
+      },
+      "local_linear": {
+        "label": "Local linear feedback (1-hop)",
+        "n_trials": 90,
+        "total_j_mean": 685.5850118365207,
+        "total_j_sd": 47.97191749485456,
+        "total_j_median": 682.5050487250905,
+        "total_j_p10_p90": [
+          632.4706819528953,
+          738.5834811162601
+        ],
+        "running_j_mean": 532.2008170108965,
+        "state_cost_plus_terminal_mean": 670.3163549702673,
+        "state_cost_plus_terminal_sd": 47.32621167814943,
+        "terminal_cost_mean": 153.38419482562432,
+        "ise_state_mean": 172.31072004821436,
+        "applied_input_energy_mean": 197.9377486220372,
+        "applied_input_energy_sd": 11.67329302890105,
+        "sampled_control_energy_mean": 190.8582108281675,
+        "terminal_norm_mean": 3.574167930622152
+      },
+      "full_linear": {
+        "label": "Full-state linear feedback",
+        "n_trials": 90,
+        "total_j_mean": 659.8064364960294,
+        "total_j_sd": 47.812336015500215,
+        "total_j_median": 656.6484670592856,
+        "total_j_p10_p90": [
+          609.0722166541711,
+          714.318219027696
+        ],
+        "running_j_mean": 545.2981875773905,
+        "state_cost_plus_terminal_mean": 643.6086043698921,
+        "state_cost_plus_terminal_sd": 47.1465884630628,
+        "terminal_cost_mean": 114.50824891863877,
+        "ise_state_mean": 176.36678515041774,
+        "applied_input_energy_mean": 209.6257086807896,
+        "applied_input_energy_sd": 13.356047624077515,
+        "sampled_control_energy_mean": 202.4729015767168,
+        "terminal_norm_mean": 3.08703148502067
+      },
+      "self_only": {
+        "label": "Self-only neural controller",
+        "n_trials": 90,
+        "total_j_mean": 1187.6701241414216,
+        "total_j_sd": 98.82018808326973,
+        "total_j_median": 1215.1345002281835,
+        "total_j_p10_p90": [
+          1054.8565947764992,
+          1276.6953074322162
+        ],
+        "running_j_mean": 672.8124335683082,
+        "state_cost_plus_terminal_mean": 1171.3649446857976,
+        "state_cost_plus_terminal_sd": 98.03568197198864,
+        "terminal_cost_mean": 514.8576905731134,
+        "ise_state_mean": 218.83575137089468,
+        "applied_input_energy_mean": 210.148529972894,
+        "applied_input_energy_sd": 13.289727068263701,
+        "sampled_control_energy_mean": 203.81474319530037,
+        "terminal_norm_mean": 6.537543361989606
+      },
+      "gnn": {
+        "label": "1-hop GNN",
+        "n_trials": 90,
+        "total_j_mean": 664.8867631554032,
+        "total_j_sd": 47.67179736481816,
+        "total_j_median": 661.6650098197804,
+        "total_j_p10_p90": [
+          613.496721355821,
+          717.8440331127334
+        ],
+        "running_j_mean": 542.2110491316646,
+        "state_cost_plus_terminal_mean": 646.7441090577672,
+        "state_cost_plus_terminal_sd": 47.162930507581,
+        "terminal_cost_mean": 122.67571402373865,
+        "ise_state_mean": 174.68946501134283,
+        "applied_input_energy_mean": 233.9725625119127,
+        "applied_input_energy_sd": 10.189752269224629,
+        "sampled_control_energy_mean": 226.7831762204499,
+        "terminal_norm_mean": 3.1962588501567275
+      }
+    }
+  },
+  "paired_contrasts": {
+    "additional_80": {
+      "total_j": [
+        {
+          "contrast_id": "gnn_minus_local_linear",
+          "policy_a": "gnn",
+          "policy_b": "local_linear",
+          "description": "1-hop GNN minus Local linear feedback (identical 1-hop observation mask)",
+          "metric": "total_j",
+          "n_trials": 80,
+          "mean_a": 668.4874472746881,
+          "mean_b": 689.2888814327152,
+          "mean_diff": -20.80143415802715,
+          "pct_diff_vs_b": -3.017810778376479,
+          "bootstrap_95ci": [
+            -21.272335897823123,
+            -20.34011134876099
+          ],
+          "median_diff": -20.668823728282916,
+          "iqr_diff": [
+            -22.36045618608233,
+            -19.565973610581523
+          ],
+          "min_diff": -26.40600707967917,
+          "max_diff": -16.33345994188869,
+          "a_lower_count": 80,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "80/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "full_linear_minus_gnn",
+          "policy_a": "full_linear",
+          "policy_b": "gnn",
+          "description": "Full-state linear feedback minus 1-hop GNN (cost of restricting 28-node state to 1-hop neighborhood)",
+          "metric": "total_j",
+          "n_trials": 80,
+          "mean_a": 663.4243685618563,
+          "mean_b": 668.4874472746881,
+          "mean_diff": -5.063078712831711,
+          "pct_diff_vs_b": -0.7573932365481265,
+          "bootstrap_95ci": [
+            -5.523139603062035,
+            -4.626079440094242
+          ],
+          "median_diff": -5.014053656525277,
+          "iqr_diff": [
+            -6.261198930856409,
+            -3.9155726214299307
+          ],
+          "min_diff": -13.386188159689823,
+          "max_diff": -0.3199915007594427,
+          "a_lower_count": 80,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "80/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "gnn_minus_finite_lqr",
+          "policy_a": "gnn",
+          "policy_b": "finite_lqr",
+          "description": "1-hop GNN minus Finite-horizon Riccati LQR",
+          "metric": "total_j",
+          "n_trials": 80,
+          "mean_a": 668.4874472746881,
+          "mean_b": 737.7762473644907,
+          "mean_diff": -69.28880008980266,
+          "pct_diff_vs_b": -9.391573710500774,
+          "bootstrap_95ci": [
+            -70.21211763666764,
+            -68.38225848760497
+          ],
+          "median_diff": -69.37933170955114,
+          "iqr_diff": [
+            -71.5280116669432,
+            -66.60822675238188
+          ],
+          "min_diff": -84.30502450478878,
+          "max_diff": -61.85861950437493,
+          "a_lower_count": 80,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "80/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "gnn_minus_care",
+          "policy_a": "gnn",
+          "policy_b": "care",
+          "description": "1-hop GNN minus Steady-state CARE-LQR",
+          "metric": "total_j",
+          "n_trials": 80,
+          "mean_a": 668.4874472746881,
+          "mean_b": 778.139386676947,
+          "mean_diff": -109.65193940225898,
+          "pct_diff_vs_b": -14.091554968130945,
+          "bootstrap_95ci": [
+            -111.07703321263932,
+            -108.22930694088305
+          ],
+          "median_diff": -110.5364817809118,
+          "iqr_diff": [
+            -113.93920132690488,
+            -104.9611227327114
+          ],
+          "min_diff": -125.75249482550976,
+          "max_diff": -95.89609988948564,
+          "a_lower_count": 80,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "80/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "gnn_minus_self_only",
+          "policy_a": "gnn",
+          "policy_b": "self_only",
+          "description": "1-hop GNN minus Self-only neural controller (isolates 1-hop neighbor message passing)",
+          "metric": "total_j",
+          "n_trials": 80,
+          "mean_a": 668.4874472746881,
+          "mean_b": 1191.4664878371104,
+          "mean_diff": -522.9790405624224,
+          "pct_diff_vs_b": -43.89372642043799,
+          "bootstrap_95ci": [
+            -540.2684243810334,
+            -504.2885991384988
+          ],
+          "median_diff": -557.6150010744497,
+          "iqr_diff": [
+            -569.7026047641804,
+            -510.7897642058761
+          ],
+          "min_diff": -595.6413530338934,
+          "max_diff": -213.7974804072578,
+          "a_lower_count": 80,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "80/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "proportional_minus_random_proportional",
+          "policy_a": "proportional",
+          "policy_b": "random_proportional",
+          "description": "Greedy actuators + proportional minus Random actuators + proportional (8-actuator placement contrast)",
+          "metric": "total_j",
+          "n_trials": 80,
+          "mean_a": 1225.0764868345898,
+          "mean_b": 1782.3451514804924,
+          "mean_diff": -557.2686646459026,
+          "pct_diff_vs_b": -31.266035323349765,
+          "bootstrap_95ci": [
+            -567.8930658318047,
+            -546.6304479750456
+          ],
+          "median_diff": -561.6462476827777,
+          "iqr_diff": [
+            -582.3417558341357,
+            -527.6408609876709
+          ],
+          "min_diff": -681.9647564815682,
+          "max_diff": -444.857139128306,
+          "a_lower_count": 80,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "80/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        }
+      ],
+      "applied_input_energy": [
+        {
+          "contrast_id": "gnn_minus_local_linear",
+          "policy_a": "gnn",
+          "policy_b": "local_linear",
+          "description": "1-hop GNN minus Local linear feedback (identical 1-hop observation mask)",
+          "metric": "applied_input_energy",
+          "n_trials": 80,
+          "mean_a": 234.80964156170404,
+          "mean_b": 198.86047890159253,
+          "mean_diff": 35.94916266011148,
+          "pct_diff_vs_b": 18.077580250574158,
+          "bootstrap_95ci": [
+            35.3991042168218,
+            36.51840991576926
+          ],
+          "median_diff": 35.779604778573315,
+          "iqr_diff": [
+            34.07601332812577,
+            37.63928532869908
+          ],
+          "min_diff": 30.752149743648374,
+          "max_diff": 43.481382115701706,
+          "a_lower_count": 0,
+          "a_higher_count": 80,
+          "win_fraction_a_lower": "0/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "full_linear_minus_gnn",
+          "policy_a": "full_linear",
+          "policy_b": "gnn",
+          "description": "Full-state linear feedback minus 1-hop GNN (cost of restricting 28-node state to 1-hop neighborhood)",
+          "metric": "applied_input_energy",
+          "n_trials": 80,
+          "mean_a": 210.69188116817523,
+          "mean_b": 234.80964156170404,
+          "mean_diff": -24.117760393528755,
+          "pct_diff_vs_b": -10.271196801427344,
+          "bootstrap_95ci": [
+            -25.582078160345485,
+            -22.61250525638041
+          ],
+          "median_diff": -24.97887870748447,
+          "iqr_diff": [
+            -28.372538255201263,
+            -19.113811697869643
+          ],
+          "min_diff": -42.92625316991692,
+          "max_diff": -8.776986266822746,
+          "a_lower_count": 80,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "80/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "gnn_minus_finite_lqr",
+          "policy_a": "gnn",
+          "policy_b": "finite_lqr",
+          "description": "1-hop GNN minus Finite-horizon Riccati LQR",
+          "metric": "applied_input_energy",
+          "n_trials": 80,
+          "mean_a": 234.80964156170404,
+          "mean_b": 149.132111398816,
+          "mean_diff": 85.677530162888,
+          "pct_diff_vs_b": 57.45075916867105,
+          "bootstrap_95ci": [
+            85.35066700962533,
+            86.00788123308276
+          ],
+          "median_diff": 85.42156390402111,
+          "iqr_diff": [
+            84.50897829402041,
+            86.89218725201656
+          ],
+          "min_diff": 82.78697210548825,
+          "max_diff": 89.35462890972087,
+          "a_lower_count": 0,
+          "a_higher_count": 80,
+          "win_fraction_a_lower": "0/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "gnn_minus_care",
+          "policy_a": "gnn",
+          "policy_b": "care",
+          "description": "1-hop GNN minus Steady-state CARE-LQR",
+          "metric": "applied_input_energy",
+          "n_trials": 80,
+          "mean_a": 234.80964156170404,
+          "mean_b": 133.27762841274807,
+          "mean_diff": 101.53201314895594,
+          "pct_diff_vs_b": 76.18083721787201,
+          "bootstrap_95ci": [
+            101.10956331936045,
+            101.9425656081429
+          ],
+          "median_diff": 101.62273838174653,
+          "iqr_diff": [
+            100.1994074828956,
+            102.57747741956696
+          ],
+          "min_diff": 97.20579478811845,
+          "max_diff": 105.83190420902685,
+          "a_lower_count": 0,
+          "a_higher_count": 80,
+          "win_fraction_a_lower": "0/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "gnn_minus_self_only",
+          "policy_a": "gnn",
+          "policy_b": "self_only",
+          "description": "1-hop GNN minus Self-only neural controller (isolates 1-hop neighbor message passing)",
+          "metric": "applied_input_energy",
+          "n_trials": 80,
+          "mean_a": 234.80964156170404,
+          "mean_b": 210.4957769582291,
+          "mean_diff": 24.313864603474855,
+          "pct_diff_vs_b": 11.550761233703852,
+          "bootstrap_95ci": [
+            21.550956108124282,
+            27.264095308756772
+          ],
+          "median_diff": 21.005164808002476,
+          "iqr_diff": [
+            16.26487105490692,
+            28.235343798555498
+          ],
+          "min_diff": 4.7820301014396875,
+          "max_diff": 78.75832867612212,
+          "a_lower_count": 0,
+          "a_higher_count": 80,
+          "win_fraction_a_lower": "0/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        },
+        {
+          "contrast_id": "proportional_minus_random_proportional",
+          "policy_a": "proportional",
+          "policy_b": "random_proportional",
+          "description": "Greedy actuators + proportional minus Random actuators + proportional (8-actuator placement contrast)",
+          "metric": "applied_input_energy",
+          "n_trials": 80,
+          "mean_a": 38.93818204156662,
+          "mean_b": 63.67503394245007,
+          "mean_diff": -24.73685190088345,
+          "pct_diff_vs_b": -38.84858848012674,
+          "bootstrap_95ci": [
+            -26.22486702193776,
+            -23.2542729546871
+          ],
+          "median_diff": -24.69405926244625,
+          "iqr_diff": [
+            -29.056369487963707,
+            -19.84491948325427
+          ],
+          "min_diff": -38.18112502833038,
+          "max_diff": -10.523538229186627,
+          "a_lower_count": 80,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "80/80",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 7.849526548031477e-15,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 4.7097159288188865e-14
+        }
+      ]
+    },
+    "pooled_90": {
+      "total_j": [
+        {
+          "contrast_id": "gnn_minus_local_linear",
+          "policy_a": "gnn",
+          "policy_b": "local_linear",
+          "description": "1-hop GNN minus Local linear feedback (identical 1-hop observation mask)",
+          "metric": "total_j",
+          "n_trials": 90,
+          "mean_a": 664.8867631554032,
+          "mean_b": 685.5850118365207,
+          "mean_diff": -20.698248681117533,
+          "pct_diff_vs_b": -3.0190637665301057,
+          "bootstrap_95ci": [
+            -21.147639129847413,
+            -20.24870069768973
+          ],
+          "median_diff": -20.668823728282916,
+          "iqr_diff": [
+            -22.2845052021689,
+            -19.553011394549685
+          ],
+          "min_diff": -26.40600707967917,
+          "max_diff": -15.4458746205853,
+          "a_lower_count": 90,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "90/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "full_linear_minus_gnn",
+          "policy_a": "full_linear",
+          "policy_b": "gnn",
+          "description": "Full-state linear feedback minus 1-hop GNN (cost of restricting 28-node state to 1-hop neighborhood)",
+          "metric": "total_j",
+          "n_trials": 90,
+          "mean_a": 659.8064364960294,
+          "mean_b": 664.8867631554032,
+          "mean_diff": -5.080326659373804,
+          "pct_diff_vs_b": -0.7640890059630177,
+          "bootstrap_95ci": [
+            -5.520732894628385,
+            -4.632625099897835
+          ],
+          "median_diff": -5.08534514749681,
+          "iqr_diff": [
+            -6.264240766758888,
+            -3.838996025012591
+          ],
+          "min_diff": -13.386188159689823,
+          "max_diff": -0.3199915007594427,
+          "a_lower_count": 90,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "90/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "gnn_minus_finite_lqr",
+          "policy_a": "gnn",
+          "policy_b": "finite_lqr",
+          "description": "1-hop GNN minus Finite-horizon Riccati LQR",
+          "metric": "total_j",
+          "n_trials": 90,
+          "mean_a": 664.8867631554032,
+          "mean_b": 734.0570693350329,
+          "mean_diff": -69.17030617962965,
+          "pct_diff_vs_b": -9.423014785797186,
+          "bootstrap_95ci": [
+            -70.04306192460832,
+            -68.27689526976656
+          ],
+          "median_diff": -69.37933170955114,
+          "iqr_diff": [
+            -71.53582718846374,
+            -66.55673878628426
+          ],
+          "min_diff": -84.30502450478878,
+          "max_diff": -61.23548892135693,
+          "a_lower_count": 90,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "90/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "gnn_minus_care",
+          "policy_a": "gnn",
+          "policy_b": "care",
+          "description": "1-hop GNN minus Steady-state CARE-LQR",
+          "metric": "total_j",
+          "n_trials": 90,
+          "mean_a": 664.8867631554032,
+          "mean_b": 774.2030579486822,
+          "mean_diff": -109.31629479327894,
+          "pct_diff_vs_b": -14.119847974111844,
+          "bootstrap_95ci": [
+            -110.62858753410967,
+            -107.91524791591783
+          ],
+          "median_diff": -110.27789447566278,
+          "iqr_diff": [
+            -113.75834489887595,
+            -104.69049803101447
+          ],
+          "min_diff": -125.75249482550976,
+          "max_diff": -93.32253968140162,
+          "a_lower_count": 90,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "90/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "gnn_minus_self_only",
+          "policy_a": "gnn",
+          "policy_b": "self_only",
+          "description": "1-hop GNN minus Self-only neural controller (isolates 1-hop neighbor message passing)",
+          "metric": "total_j",
+          "n_trials": 90,
+          "mean_a": 664.8867631554032,
+          "mean_b": 1187.6701241414216,
+          "mean_diff": -522.7833609860184,
+          "pct_diff_vs_b": -44.01755591553198,
+          "bootstrap_95ci": [
+            -539.2041796218706,
+            -504.59300658260025
+          ],
+          "median_diff": -557.6150010744497,
+          "iqr_diff": [
+            -570.4162162812382,
+            -512.0544624448033
+          ],
+          "min_diff": -595.6413530338934,
+          "max_diff": -213.7974804072578,
+          "a_lower_count": 90,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "90/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "proportional_minus_random_proportional",
+          "policy_a": "proportional",
+          "policy_b": "random_proportional",
+          "description": "Greedy actuators + proportional minus Random actuators + proportional (8-actuator placement contrast)",
+          "metric": "total_j",
+          "n_trials": 90,
+          "mean_a": 1220.225267483403,
+          "mean_b": 1777.00984858376,
+          "mean_diff": -556.7845811003573,
+          "pct_diff_vs_b": -31.332667151175503,
+          "bootstrap_95ci": [
+            -566.777513142866,
+            -546.649566525549
+          ],
+          "median_diff": -559.8165116893209,
+          "iqr_diff": [
+            -583.0533208350637,
+            -526.4555996348494
+          ],
+          "min_diff": -681.9647564815682,
+          "max_diff": -444.857139128306,
+          "a_lower_count": 90,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "90/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        }
+      ],
+      "applied_input_energy": [
+        {
+          "contrast_id": "gnn_minus_local_linear",
+          "policy_a": "gnn",
+          "policy_b": "local_linear",
+          "description": "1-hop GNN minus Local linear feedback (identical 1-hop observation mask)",
+          "metric": "applied_input_energy",
+          "n_trials": 90,
+          "mean_a": 233.9725625119127,
+          "mean_b": 197.9377486220372,
+          "mean_diff": 36.03481388987554,
+          "pct_diff_vs_b": 18.205124662039143,
+          "bootstrap_95ci": [
+            35.4957044886984,
+            36.570432683967674
+          ],
+          "median_diff": 36.03960066893555,
+          "iqr_diff": [
+            34.097390924306204,
+            37.87277546383011
+          ],
+          "min_diff": 30.26844669925555,
+          "max_diff": 43.481382115701706,
+          "a_lower_count": 0,
+          "a_higher_count": 90,
+          "win_fraction_a_lower": "0/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "full_linear_minus_gnn",
+          "policy_a": "full_linear",
+          "policy_b": "gnn",
+          "description": "Full-state linear feedback minus 1-hop GNN (cost of restricting 28-node state to 1-hop neighborhood)",
+          "metric": "applied_input_energy",
+          "n_trials": 90,
+          "mean_a": 209.6257086807896,
+          "mean_b": 233.9725625119127,
+          "mean_diff": -24.346853831123134,
+          "pct_diff_vs_b": -10.405858520220086,
+          "bootstrap_95ci": [
+            -25.831333157170075,
+            -22.902880334320134
+          ],
+          "median_diff": -24.97887870748447,
+          "iqr_diff": [
+            -28.675875956153156,
+            -19.252555623824094
+          ],
+          "min_diff": -42.92625316991692,
+          "max_diff": -8.776986266822746,
+          "a_lower_count": 90,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "90/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "gnn_minus_finite_lqr",
+          "policy_a": "gnn",
+          "policy_b": "finite_lqr",
+          "description": "1-hop GNN minus Finite-horizon Riccati LQR",
+          "metric": "applied_input_energy",
+          "n_trials": 90,
+          "mean_a": 233.9725625119127,
+          "mean_b": 148.34359981786614,
+          "mean_diff": 85.6289626940466,
+          "pct_diff_vs_b": 57.72339541387728,
+          "bootstrap_95ci": [
+            85.31146852053138,
+            85.95083381913462
+          ],
+          "median_diff": 85.4573982383777,
+          "iqr_diff": [
+            84.49519712116216,
+            86.89342101688493
+          ],
+          "min_diff": 82.31284801914086,
+          "max_diff": 89.35462890972087,
+          "a_lower_count": 0,
+          "a_higher_count": 90,
+          "win_fraction_a_lower": "0/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "gnn_minus_care",
+          "policy_a": "gnn",
+          "policy_b": "care",
+          "description": "1-hop GNN minus Steady-state CARE-LQR",
+          "metric": "applied_input_energy",
+          "n_trials": 90,
+          "mean_a": 233.9725625119127,
+          "mean_b": 132.5612265840271,
+          "mean_diff": 101.41133592788562,
+          "pct_diff_vs_b": 76.5015069195996,
+          "bootstrap_95ci": [
+            101.02738285976405,
+            101.78885947803936
+          ],
+          "median_diff": 101.48344207820693,
+          "iqr_diff": [
+            100.08196959517943,
+            102.47561876061653
+          ],
+          "min_diff": 97.20579478811845,
+          "max_diff": 105.83190420902685,
+          "a_lower_count": 0,
+          "a_higher_count": 90,
+          "win_fraction_a_lower": "0/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "gnn_minus_self_only",
+          "policy_a": "gnn",
+          "policy_b": "self_only",
+          "description": "1-hop GNN minus Self-only neural controller (isolates 1-hop neighbor message passing)",
+          "metric": "applied_input_energy",
+          "n_trials": 90,
+          "mean_a": 233.9725625119127,
+          "mean_b": 210.148529972894,
+          "mean_diff": 23.824032539018692,
+          "pct_diff_vs_b": 11.3367590732572,
+          "bootstrap_95ci": [
+            21.25601878446699,
+            26.6415819106958
+          ],
+          "median_diff": 20.52058434876858,
+          "iqr_diff": [
+            15.335880650682057,
+            27.564390377982335
+          ],
+          "min_diff": 1.4438273082537592,
+          "max_diff": 78.75832867612212,
+          "a_lower_count": 0,
+          "a_higher_count": 90,
+          "win_fraction_a_lower": "0/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        },
+        {
+          "contrast_id": "proportional_minus_random_proportional",
+          "policy_a": "proportional",
+          "policy_b": "random_proportional",
+          "description": "Greedy actuators + proportional minus Random actuators + proportional (8-actuator placement contrast)",
+          "metric": "applied_input_energy",
+          "n_trials": 90,
+          "mean_a": 38.663788740624454,
+          "mean_b": 63.301608394716006,
+          "mean_diff": -24.637819654091558,
+          "pct_diff_vs_b": -38.92131697580714,
+          "bootstrap_95ci": [
+            -25.990135025978272,
+            -23.32597777243599
+          ],
+          "median_diff": -24.523996877438563,
+          "iqr_diff": [
+            -28.987297789876664,
+            -20.398564755483335
+          ],
+          "min_diff": -38.18112502833038,
+          "max_diff": -10.523538229186627,
+          "a_lower_count": 90,
+          "a_higher_count": 0,
+          "win_fraction_a_lower": "90/90",
+          "wilcoxon_statistic": 0.0,
+          "wilcoxon_p_raw": 1.7437900167092118e-16,
+          "wilcoxon_p_holm": 0.0,
+          "wilcoxon_p_holm_exact": 1.0462740100255272e-15
+        }
+      ]
+    }
+  },
+  "forest_vs_local_linear_80": [
+    {
+      "contrast_id": "full_linear_vs_local_linear",
+      "policy_a": "full_linear",
+      "policy_b": "local_linear",
+      "description": "Full-state linear minus Local linear",
+      "metric": "total_j",
+      "n_trials": 80,
+      "mean_a": 663.4243685618563,
+      "mean_b": 689.2888814327152,
+      "mean_diff": -25.864512870858857,
+      "pct_diff_vs_b": -3.7523473201973614,
+      "bootstrap_95ci": [
+        -26.43862089657055,
+        -25.296817629757548
+      ],
+      "median_diff": -25.980291737254788,
+      "iqr_diff": [
+        -27.42738748898097,
+        -24.263943827522326
+      ],
+      "min_diff": -34.71597946472332,
+      "max_diff": -17.935428507044662,
+      "a_lower_count": 80,
+      "a_higher_count": 0,
+      "win_fraction_a_lower": "80/80",
+      "wilcoxon_statistic": 0.0,
+      "wilcoxon_p_raw": 7.849526548031477e-15,
+      "wilcoxon_p_holm": 0.0,
+      "wilcoxon_p_holm_exact": 3.9247632740157384e-14
+    },
+    {
+      "contrast_id": "gnn_vs_local_linear",
+      "policy_a": "gnn",
+      "policy_b": "local_linear",
+      "description": "1-hop GNN minus Local linear",
+      "metric": "total_j",
+      "n_trials": 80,
+      "mean_a": 668.4874472746881,
+      "mean_b": 689.2888814327152,
+      "mean_diff": -20.80143415802715,
+      "pct_diff_vs_b": -3.017810778376479,
+      "bootstrap_95ci": [
+        -21.272335897823123,
+        -20.34011134876099
+      ],
+      "median_diff": -20.668823728282916,
+      "iqr_diff": [
+        -22.36045618608233,
+        -19.565973610581523
+      ],
+      "min_diff": -26.40600707967917,
+      "max_diff": -16.33345994188869,
+      "a_lower_count": 80,
+      "a_higher_count": 0,
+      "win_fraction_a_lower": "80/80",
+      "wilcoxon_statistic": 0.0,
+      "wilcoxon_p_raw": 7.849526548031477e-15,
+      "wilcoxon_p_holm": 0.0,
+      "wilcoxon_p_holm_exact": 3.9247632740157384e-14
+    },
+    {
+      "contrast_id": "finite_lqr_vs_local_linear",
+      "policy_a": "finite_lqr",
+      "policy_b": "local_linear",
+      "description": "Finite-horizon LQR minus Local linear",
+      "metric": "total_j",
+      "n_trials": 80,
+      "mean_a": 737.7762473644907,
+      "mean_b": 689.2888814327152,
+      "mean_diff": 48.487365931775514,
+      "pct_diff_vs_b": 7.034404186383005,
+      "bootstrap_95ci": [
+        47.62714357777728,
+        49.373345896233324
+      ],
+      "median_diff": 48.07780665038962,
+      "iqr_diff": [
+        45.8484303965071,
+        50.14658291321069
+      ],
+      "min_diff": 41.03475499772662,
+      "max_diff": 58.99770109094425,
+      "a_lower_count": 0,
+      "a_higher_count": 80,
+      "win_fraction_a_lower": "0/80",
+      "wilcoxon_statistic": 0.0,
+      "wilcoxon_p_raw": 7.849526548031477e-15,
+      "wilcoxon_p_holm": 0.0,
+      "wilcoxon_p_holm_exact": 3.9247632740157384e-14
+    },
+    {
+      "contrast_id": "care_vs_local_linear",
+      "policy_a": "care",
+      "policy_b": "local_linear",
+      "description": "Steady-state CARE-LQR minus Local linear",
+      "metric": "total_j",
+      "n_trials": 80,
+      "mean_a": 778.139386676947,
+      "mean_b": 689.2888814327152,
+      "mean_diff": 88.85050524423181,
+      "pct_diff_vs_b": 12.890169512027002,
+      "bootstrap_95ci": [
+        87.49988992439843,
+        90.18870144927514
+      ],
+      "median_diff": 89.15614329009361,
+      "iqr_diff": [
+        84.38018577847558,
+        92.83447676315919
+      ],
+      "min_diff": 76.20228994753586,
+      "max_diff": 100.44551957637088,
+      "a_lower_count": 0,
+      "a_higher_count": 80,
+      "win_fraction_a_lower": "0/80",
+      "wilcoxon_statistic": 0.0,
+      "wilcoxon_p_raw": 7.849526548031477e-15,
+      "wilcoxon_p_holm": 0.0,
+      "wilcoxon_p_holm_exact": 3.9247632740157384e-14
+    },
+    {
+      "contrast_id": "self_only_vs_local_linear",
+      "policy_a": "self_only",
+      "policy_b": "local_linear",
+      "description": "Self-only NN minus Local linear",
+      "metric": "total_j",
+      "n_trials": 80,
+      "mean_a": 1191.4664878371104,
+      "mean_b": 689.2888814327152,
+      "mean_diff": 502.1776064043952,
+      "pct_diff_vs_b": 72.8544475228729,
+      "bootstrap_95ci": [
+        483.57434992876085,
+        519.4982949128193
+      ],
+      "median_diff": 538.9201273823594,
+      "iqr_diff": [
+        491.53887604697843,
+        548.9965089091017
+      ],
+      "min_diff": 192.1666570916816,
+      "max_diff": 572.7337981716742,
+      "a_lower_count": 0,
+      "a_higher_count": 80,
+      "win_fraction_a_lower": "0/80",
+      "wilcoxon_statistic": 0.0,
+      "wilcoxon_p_raw": 7.849526548031477e-15,
+      "wilcoxon_p_holm": 0.0,
+      "wilcoxon_p_holm_exact": 3.9247632740157384e-14
+    }
+  ],
+  "benchmark_exact_summaries": {
+    "driver_scaling_120": {
+      "n_nodes": 120,
+      "n_trials_per_point": 5,
+      "k_values": [
+        1.0,
+        1.5,
+        2.0,
+        3.0,
+        4.0,
+        5.5,
+        7.0,
+        9.0
+      ],
+      "exp_neg_half_k_reference": [
+        0.6065306597126334,
+        0.4723665527410147,
+        0.36787944117144233,
+        0.22313016014842982,
+        0.1353352832366127,
+        0.06392786120670757,
+        0.0301973834223185,
+        0.011108996538242306
+      ],
+      "er_k4_observed_mean": 0.03,
+      "exp_ref_k4": 0.1353352832366127,
+      "ensembles": {
+        "Scale-Free (γ=2.2, Heterogeneous)": [
+          {
+            "target_mean_out_degree": 1.0,
+            "shared_fraction_mean": 0.6466666666666667,
+            "shared_fraction_sd": 0.03439961240091716,
+            "dedicated_fraction_mean": 0.6466666666666667,
+            "dedicated_fraction_sd": 0.03439961240091716,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 1.5,
+            "shared_fraction_mean": 0.5633333333333332,
+            "shared_fraction_sd": 0.021473497877875215,
+            "dedicated_fraction_mean": 0.5633333333333332,
+            "dedicated_fraction_sd": 0.021473497877875215,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 2.0,
+            "shared_fraction_mean": 0.45166666666666666,
+            "shared_fraction_sd": 0.014337208778404366,
+            "dedicated_fraction_mean": 0.45166666666666666,
+            "dedicated_fraction_sd": 0.014337208778404366,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 3.0,
+            "shared_fraction_mean": 0.33166666666666667,
+            "shared_fraction_sd": 0.014337208778404368,
+            "dedicated_fraction_mean": 0.33166666666666667,
+            "dedicated_fraction_sd": 0.014337208778404368,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 4.0,
+            "shared_fraction_mean": 0.25666666666666665,
+            "shared_fraction_sd": 0.034318767136623324,
+            "dedicated_fraction_mean": 0.25666666666666665,
+            "dedicated_fraction_sd": 0.034318767136623324,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 5.5,
+            "shared_fraction_mean": 0.14499999999999996,
+            "shared_fraction_sd": 0.02013840995599095,
+            "dedicated_fraction_mean": 0.14499999999999996,
+            "dedicated_fraction_sd": 0.02013840995599095,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 7.0,
+            "shared_fraction_mean": 0.08166666666666667,
+            "shared_fraction_sd": 0.030912061651652348,
+            "dedicated_fraction_mean": 0.08166666666666667,
+            "dedicated_fraction_sd": 0.030912061651652348,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 9.0,
+            "shared_fraction_mean": 0.02,
+            "shared_fraction_sd": 0.01,
+            "dedicated_fraction_mean": 0.02,
+            "dedicated_fraction_sd": 0.01,
+            "overhead_mean": 0.0
+          }
+        ],
+        "Scale-Free (γ=2.8, Moderate)": [
+          {
+            "target_mean_out_degree": 1.0,
+            "shared_fraction_mean": 0.5266666666666666,
+            "shared_fraction_sd": 0.013333333333333326,
+            "dedicated_fraction_mean": 0.5266666666666666,
+            "dedicated_fraction_sd": 0.013333333333333326,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 1.5,
+            "shared_fraction_mean": 0.43499999999999994,
+            "shared_fraction_sd": 0.017795130420052183,
+            "dedicated_fraction_mean": 0.43499999999999994,
+            "dedicated_fraction_sd": 0.017795130420052183,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 2.0,
+            "shared_fraction_mean": 0.3366666666666667,
+            "shared_fraction_sd": 0.03929942040850531,
+            "dedicated_fraction_mean": 0.3366666666666667,
+            "dedicated_fraction_sd": 0.03929942040850531,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 3.0,
+            "shared_fraction_mean": 0.2066666666666667,
+            "shared_fraction_sd": 0.016996731711975955,
+            "dedicated_fraction_mean": 0.2066666666666667,
+            "dedicated_fraction_sd": 0.016996731711975955,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 4.0,
+            "shared_fraction_mean": 0.12666666666666665,
+            "shared_fraction_sd": 0.009718253158075498,
+            "dedicated_fraction_mean": 0.12666666666666665,
+            "dedicated_fraction_sd": 0.009718253158075498,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 5.5,
+            "shared_fraction_mean": 0.03333333333333333,
+            "shared_fraction_sd": 0.005270462766947297,
+            "dedicated_fraction_mean": 0.03333333333333333,
+            "dedicated_fraction_sd": 0.005270462766947297,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 7.0,
+            "shared_fraction_mean": 0.015000000000000003,
+            "shared_fraction_sd": 0.0062360956446232355,
+            "dedicated_fraction_mean": 0.015000000000000003,
+            "dedicated_fraction_sd": 0.0062360956446232355,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 9.0,
+            "shared_fraction_mean": 0.008333333333333333,
+            "shared_fraction_sd": 0.0,
+            "dedicated_fraction_mean": 0.008333333333333333,
+            "dedicated_fraction_sd": 0.0,
+            "overhead_mean": 0.0
+          }
+        ],
+        "Erdős–Rényi (Random)": [
+          {
+            "target_mean_out_degree": 1.0,
+            "shared_fraction_mean": 0.48166666666666663,
+            "shared_fraction_sd": 0.027588242262078087,
+            "dedicated_fraction_mean": 0.48166666666666663,
+            "dedicated_fraction_sd": 0.027588242262078087,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 1.5,
+            "shared_fraction_mean": 0.275,
+            "shared_fraction_sd": 0.01178511301977579,
+            "dedicated_fraction_mean": 0.275,
+            "dedicated_fraction_sd": 0.01178511301977579,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 2.0,
+            "shared_fraction_mean": 0.24333333333333335,
+            "shared_fraction_sd": 0.026034165586355518,
+            "dedicated_fraction_mean": 0.24333333333333335,
+            "dedicated_fraction_sd": 0.026034165586355518,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 3.0,
+            "shared_fraction_mean": 0.09333333333333334,
+            "shared_fraction_sd": 0.01699673171197595,
+            "dedicated_fraction_mean": 0.09333333333333334,
+            "dedicated_fraction_sd": 0.01699673171197595,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 4.0,
+            "shared_fraction_mean": 0.03,
+            "shared_fraction_sd": 0.01715938356831167,
+            "dedicated_fraction_mean": 0.03,
+            "dedicated_fraction_sd": 0.01715938356831167,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 5.5,
+            "shared_fraction_mean": 0.011666666666666667,
+            "shared_fraction_sd": 0.00408248290463863,
+            "dedicated_fraction_mean": 0.011666666666666667,
+            "dedicated_fraction_sd": 0.00408248290463863,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 7.0,
+            "shared_fraction_mean": 0.008333333333333333,
+            "shared_fraction_sd": 0.0,
+            "dedicated_fraction_mean": 0.008333333333333333,
+            "dedicated_fraction_sd": 0.0,
+            "overhead_mean": 0.0
+          },
+          {
+            "target_mean_out_degree": 9.0,
+            "shared_fraction_mean": 0.008333333333333333,
+            "shared_fraction_sd": 0.0,
+            "dedicated_fraction_mean": 0.008333333333333333,
+            "dedicated_fraction_sd": 0.0,
+            "overhead_mean": 0.0
+          }
+        ]
+      },
+      "random_ensemble_overhead_note": "Across all 120 ER and Goh-Kahng-Kim Scale-Free realizations, every source SCC is a single zero-in-degree vertex, which is automatically unmatched in every maximum matching (alpha = beta), yielding (m + beta - alpha)/N = m/N.",
+      "cyclic_source_scc_overhead": {
+        "n_nodes": 120,
+        "description": "120-node networks with beta_c upstream zero-inflow 3-cycles feeding an intermediate ring and a 7-sink terminal bottleneck (m = 7 shared channels constant at 5.83%, while dedicated sites m + beta - alpha increase from 7 to 22; all PBH verified 120/120).",
+        "series": [
+          {
+            "n_cyclic_source_sccs": 0,
+            "n_total_source_sccs_beta": 1,
+            "matching_deficiency_m": 7,
+            "minimum_shared_channels": 7,
+            "minimum_dedicated_sites": 7,
+            "source_scc_overhead_sites": 0,
+            "shared_fraction": 0.058333,
+            "dedicated_fraction": 0.058333,
+            "overhead_fraction": 0.0,
+            "pbh_rank_dedicated": 120,
+            "pbh_rank_shared": 120
+          },
+          {
+            "n_cyclic_source_sccs": 2,
+            "n_total_source_sccs_beta": 2,
+            "matching_deficiency_m": 7,
+            "minimum_shared_channels": 7,
+            "minimum_dedicated_sites": 8,
+            "source_scc_overhead_sites": 1,
+            "shared_fraction": 0.058333,
+            "dedicated_fraction": 0.066667,
+            "overhead_fraction": 0.008333,
+            "pbh_rank_dedicated": 120,
+            "pbh_rank_shared": 120
+          },
+          {
+            "n_cyclic_source_sccs": 4,
+            "n_total_source_sccs_beta": 4,
+            "matching_deficiency_m": 7,
+            "minimum_shared_channels": 7,
+            "minimum_dedicated_sites": 10,
+            "source_scc_overhead_sites": 3,
+            "shared_fraction": 0.058333,
+            "dedicated_fraction": 0.083333,
+            "overhead_fraction": 0.025,
+            "pbh_rank_dedicated": 120,
+            "pbh_rank_shared": 120
+          },
+          {
+            "n_cyclic_source_sccs": 6,
+            "n_total_source_sccs_beta": 6,
+            "matching_deficiency_m": 7,
+            "minimum_shared_channels": 7,
+            "minimum_dedicated_sites": 12,
+            "source_scc_overhead_sites": 5,
+            "shared_fraction": 0.058333,
+            "dedicated_fraction": 0.1,
+            "overhead_fraction": 0.041667,
+            "pbh_rank_dedicated": 120,
+            "pbh_rank_shared": 120
+          },
+          {
+            "n_cyclic_source_sccs": 8,
+            "n_total_source_sccs_beta": 8,
+            "matching_deficiency_m": 7,
+            "minimum_shared_channels": 7,
+            "minimum_dedicated_sites": 14,
+            "source_scc_overhead_sites": 7,
+            "shared_fraction": 0.058333,
+            "dedicated_fraction": 0.116667,
+            "overhead_fraction": 0.058333,
+            "pbh_rank_dedicated": 120,
+            "pbh_rank_shared": 120
+          },
+          {
+            "n_cyclic_source_sccs": 10,
+            "n_total_source_sccs_beta": 10,
+            "matching_deficiency_m": 7,
+            "minimum_shared_channels": 7,
+            "minimum_dedicated_sites": 16,
+            "source_scc_overhead_sites": 9,
+            "shared_fraction": 0.058333,
+            "dedicated_fraction": 0.133333,
+            "overhead_fraction": 0.075,
+            "pbh_rank_dedicated": 120,
+            "pbh_rank_shared": 120
+          },
+          {
+            "n_cyclic_source_sccs": 12,
+            "n_total_source_sccs_beta": 12,
+            "matching_deficiency_m": 7,
+            "minimum_shared_channels": 7,
+            "minimum_dedicated_sites": 18,
+            "source_scc_overhead_sites": 11,
+            "shared_fraction": 0.058333,
+            "dedicated_fraction": 0.15,
+            "overhead_fraction": 0.091667,
+            "pbh_rank_dedicated": 120,
+            "pbh_rank_shared": 120
+          },
+          {
+            "n_cyclic_source_sccs": 16,
+            "n_total_source_sccs_beta": 16,
+            "matching_deficiency_m": 7,
+            "minimum_shared_channels": 7,
+            "minimum_dedicated_sites": 22,
+            "source_scc_overhead_sites": 15,
+            "shared_fraction": 0.058333,
+            "dedicated_fraction": 0.183333,
+            "overhead_fraction": 0.125,
+            "pbh_rank_dedicated": 120,
+            "pbh_rank_shared": 120
+          }
+        ]
+      }
+    },
+    "topology_cascade_32": {
+      "n_nodes": 32,
+      "n_edges": 65,
+      "n_drivers_dedicated": 11,
+      "minimum_input_channels_shared": 11,
+      "pbh_rank": 32,
+      "edge_counts": {
+        "critical": 5,
+        "ordinary": 47,
+        "redundant": 13
+      },
+      "two_disjoint_cycles_control": {
+        "edges": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            3,
+            2
+          ]
+        ],
+        "dedicated_sites": [
+          0,
+          2
+        ],
+        "minimum_input_channels": 1,
+        "shared_input_sites": [
+          [
+            0,
+            2
+          ]
+        ],
+        "pbh_rank_one_site": 3,
+        "pbh_rank_dedicated": 4,
+        "pbh_rank_shared": 4
+      }
+    },
+    "actuator_selection_30": {
+      "n_nodes": 30,
+      "budgets": [
+        4,
+        6,
+        8,
+        10,
+        12,
+        15
+      ],
+      "k10_comparison": {
+        "Submodular Greedy": {
+          "normalized_log_det": 187.56820881545465,
+          "reachability_rank": 30,
+          "input_energy": 389.94140440573096,
+          "terminal_error": 0.18461377261051393,
+          "regularized_objective": 730.7638547805964,
+          "exact_target_energy": 1724.6321850432596,
+          "minimum_terminal_error": 1.7990345387298017e-15,
+          "equal_tolerance_energy": {
+            "0.45": 38.06298346014946,
+            "0.50": 29.73717022931438
+          }
+        },
+        "Out-Degree Hubs": {
+          "normalized_log_det": 166.7353310874835,
+          "reachability_rank": 24,
+          "input_energy": 127.15529497994082,
+          "terminal_error": 0.45237101272075503,
+          "regularized_objective": 2173.5506264799556,
+          "exact_target_energy": null,
+          "minimum_terminal_error": 0.39791148104965957,
+          "equal_tolerance_energy": {
+            "0.45": 151.14698587348775,
+            "0.50": 25.881404304429562
+          }
+        },
+        "PageRank": {
+          "normalized_log_det": 163.74778766457248,
+          "reachability_rank": 24,
+          "input_energy": 339.37726668453433,
+          "terminal_error": 0.45493111009516285,
+          "regularized_objective": 2409.000416008706,
+          "exact_target_energy": null,
+          "minimum_terminal_error": 0.40897975642329526,
+          "equal_tolerance_energy": {
+            "0.45": 388.66390400651267,
+            "0.50": 114.95816464920355
+          }
+        },
+        "Betweenness": {
+          "normalized_log_det": 155.85996150719305,
+          "reachability_rank": 23,
+          "input_energy": 112.67405654735857,
+          "terminal_error": 0.5357102761314064,
+          "regularized_objective": 2982.529056075236,
+          "exact_target_energy": null,
+          "minimum_terminal_error": 0.44419030447979513,
+          "equal_tolerance_energy": {
+            "0.45": 32852.406033692656,
+            "0.50": 3198.8395151092373
+          }
+        },
+        "Random": {
+          "normalized_log_det": 157.64965342262724,
+          "reachability_rank": 26,
+          "input_energy": 282.169823825456,
+          "terminal_error": 0.46165862892062187,
+          "regularized_objective": 2413.4567203941406,
+          "exact_target_energy": null,
+          "minimum_terminal_error": 0.2987527557407591,
+          "equal_tolerance_energy": {
+            "0.45": 413.56987707565725,
+            "0.50": 93.84591065567116
+          }
+        }
+      },
+      "greedy_vs_out_degree_crossover": {
+        "crossover_tolerance_l2": 0.483111,
+        "crossover_input_energy": 32.2623,
+        "tau_0.45_greedy_energy": 38.063,
+        "tau_0.45_out_degree_energy": 151.147,
+        "tau_0.50_greedy_energy": 29.7372,
+        "tau_0.50_out_degree_energy": 25.8814
+      }
+    }
+  }
+}
